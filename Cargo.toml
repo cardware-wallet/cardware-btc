@@ -1,0 +1,22 @@
+[package]
+name = "bitcoin_lib"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib","rlib"]
+
+[dependencies]
+bitcoin = { version="0.32", features=["base64"]}
+hex = "0.4"
+wasm-bindgen = "0.2.84"
+wasm-bindgen-futures = "0.4.37"
+serde = { version = "^1.0", features = ["derive"] }
+serde_json = { version = "^1.0" }
+reqwest = { version = "0.11", default-features = false, features = ["json","rustls-tls"] }
+libc = "0.2"
+base64 = "0.13"
+bs58 = {version="0.4",features=["check"]}
+
+#This dependancy is just for testing and isn't need for build outs and stops wasm-pack build
+#tokio = { version = "1", features = ["full"]}

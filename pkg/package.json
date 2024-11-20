@@ -1,0 +1,16 @@
+{
+  "name": "bitcoin_lib",
+  "version": "0.1.0",
+  "files": [
+    "bitcoin_lib_bg.wasm",
+    "bitcoin_lib.js",
+    "bitcoin_lib_bg.js",
+    "bitcoin_lib.d.ts"
+  ],
+  "module": "bitcoin_lib.js",
+  "types": "bitcoin_lib.d.ts",
+  "sideEffects": [
+    "./bitcoin_lib.js",
+    "./snippets/*"
+  ]
+}
