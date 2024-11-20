@@ -241,6 +241,7 @@ impl Wallet{
         };
         let mut serialized_tx = Vec::new();
         let _ = unsigned_tx.consensus_encode(&mut serialized_tx);
+
         let final_str = base64::encode(&serialized_tx) + ":"+&base64::encode(&segwit_ed);
         return chunk_and_label(&final_str,46);
     }
@@ -455,7 +456,7 @@ pub fn chunk_and_label(final_str: &str, chunk_size: usize) -> Vec<String> {
         .enumerate() // Provide index for each chunk
         .map(|(index, chunk)| {
             let chunk_str = chunk.iter().collect::<String>(); // Convert chunk to string
-            format!("({}/{}){}", index + 1, total_chunks, chunk_str) // Format with index and total
+            format!("({}/{}){}", index, total_chunks, chunk_str) // Format with index and total
         })
         .collect() // Collect into a vector of strings
 }
