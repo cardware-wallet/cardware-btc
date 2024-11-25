@@ -60,7 +60,7 @@ impl Wallet{
     pub async fn sync_to_depth(&mut self, max_depth : String) -> String{
         let fee_sync = match self.fetch_fee_estimates().await{
             Ok(dict) => dict,
-            Err(_) => return "{\"Error\":\"Fee sync error.\"}".to_string(),
+            Err(_) => return "Error: Fee sync error.".to_string(),
         };
         self.fee_estimates = Some(fee_sync);
         let derivations = generate_variations(&max_depth);
@@ -75,7 +75,7 @@ impl Wallet{
                 .send()
                 .await{
                     Ok(response) => response,
-                    Err(_) => return "{\"Error\":\"Failed to connect to contract host.\"}".to_string(),
+                    Err(_) => return "Error: Failed to connect to full node (Esplora).".to_string(),
                 };
             if response.status().is_success() {
                 let body = response.text().await.unwrap();
@@ -118,28 +118,31 @@ impl Wallet{
                             }
                         }
                     }
-                    Err(_) => return "{\"Error\":\"Failed to deserialize transaction.\"}".to_string(),
+                    Err(_) => return "Error: Failed to deserialize transaction.".to_string(),
                 };
             }else{
-                return "{\"Error\":\"Failed to sync.\"}".to_string(); 
+                return "Error: Failed to connect to full node (Esplora).".to_string(); 
             }
         }
         self.btc = btc_bal;
         self.unconfirmed = unconf;
         println!("{:?}",utxos.clone() );
         self.utxos = Some(utxos);
-        return "{\"Result\":\"Sync successful.\"}".to_string();
+        return "Sync successful.".to_string();
     }
     pub async fn broadcast(&mut self, transaction : String) -> String{
         let client = Client::new();
         let tx_hex_string = match base64_to_hex(&transaction){
             Ok(tx_hex_string) => tx_hex_string,
-            Err(_) => return "{\"Error\":\"Failed to parse base64 Tx String.\"}".to_string(),
+            Err(_) => return "Error: Failed to parse base64 transaction.".to_string(),
         };
-        let tx_bytes = hex::decode(tx_hex_string.clone()).expect("Decoding failed");
+        let tx_bytes = match hex::decode(tx_hex_string.clone()){
+            Ok(tx_bytes) => tx_bytes,
+            Err(_) => return "Error: Decoding failed.".to_string(),
+        };
         let txid_str = match deserialize::<bitcoin::Transaction>(&tx_bytes){
             Ok(tx) =>tx.txid().to_string(),
-            Err(_) => return "{\"Error\":\"Invalid Tx.\"}".to_string(),
+            Err(_) => return "Error: Invalid transaction.".to_string(),
         };
         match client
             .post(format!("{}/tx",&self.esplora_url)) //.header(header::CONTENT_TYPE, "application/json")
@@ -149,11 +152,11 @@ impl Wallet{
                 Ok(_) => {
                         //Add to trusted pending
                         let mut tp = self.get_trusted_pending();
-                        tp.push(txid_str);
+                        tp.push(txid_str.clone());
                         self.set_trusted_pending(tp);
-                        return "success".to_string();
+                        return txid_str;
                     }
-                Err(_) => return "{\"Error\":\"Failed to broadcast payload.\"}".to_string(),
+                Err(_) => return "Error: Failed to broadcast transaction.".to_string(),
             }
     }
     pub fn send(&self, recipient_addrs : Vec<String>, amounts : Vec<u64>, fee : u64) -> Vec<String>{
@@ -179,12 +182,12 @@ impl Wallet{
             total_amount += amount;
         }
         if total_amount + fee > self.btc {
-            return vec!["Error: Insuffient Funds.".to_string()];
+            return vec!["Error: Insufficient funds.".to_string()];
         }
         let mut total_spend : u64 = 0;
         let my_utxos = match &self.utxos{
             Some(utxos)=>utxos,
-            None=> return vec!["Error: no utxos".to_string()],
+            None=> return vec!["Error: No UTXOs to spend.".to_string()],
         };
         for utxo in my_utxos{
             let outpoint = convert_to_outpoint(&utxo.utxo);
@@ -210,7 +213,7 @@ impl Wallet{
                 Ok(rec) => {
                     match rec.require_network(network){
                         Ok(checked) => checked,
-                        Err(_) => return vec!["Error: Failed to parse network.".to_string()],
+                        Err(_) => return vec!["Error: Invalid recipient address.".to_string()],
                     }
                 }
                 Err(_) => return vec!["Error: Invalid recipient address.".to_string()],
@@ -232,7 +235,7 @@ impl Wallet{
         txout_vec.push(change);
 
 
-        let locktime = LockTime::from_height(0).expect("valid height");
+        let locktime = LockTime::from_height(0).expect("Zero always valid.");
         let unsigned_tx = Transaction{
             version: bitcoin::transaction::Version(2),
             lock_time : locktime.into(),
@@ -362,9 +365,15 @@ impl Wallet{
     pub fn new_address(&self, derivation_path : &str)-> String{
         let network = self.get_network();
         let xpub_str = convert_to_xpub(self.xpub.clone());
-        let xpub = Xpub::from_str(&xpub_str).expect("Invalid extended public key");
+        let xpub = match Xpub::from_str(&xpub_str){
+            Ok(xpub) => xpub,
+            Err(_) => return "Error: Invalid extended public key.".to_string(),
+        };
         let derivation_path = DerivationPath::from_str(derivation_path).unwrap();
-        let derived_xpub = xpub.derive_pub(&bitcoin::secp256k1::Secp256k1::new(), &derivation_path).expect("Error deriving xpub");
+        let derived_xpub = match xpub.derive_pub(&bitcoin::secp256k1::Secp256k1::new(), &derivation_path){
+            Ok(derived_xpub) => derived_xpub,
+            Err(_) => return "Error: Xpub derivation error.".to_string(),
+        };
         let public_key = derived_xpub.to_pub();
         let address = Address::p2wpkh(&public_key, network);
         return format!("{:?}",address);
@@ -384,11 +393,11 @@ impl Wallet{
         path.push_str("/fee-estimates");
         let fee_histo_text  = match reqwest::get(path).await{
             Ok(fee_histo_text) => fee_histo_text,
-            Err(_) => return Err("{\"Error\":\"Connection error, esplora url.\"}"),
+            Err(_) => return Err("Error: Connection error, esplora url."),
         };
         let fee_histo = match fee_histo_text.text().await{
             Ok(fee_histo) => fee_histo,
-            Err(_) => return Err("{\"Error\":\"Failed to parse result. Try again.\"}"),
+            Err(_) => return Err("Error: Failed to parse result."),
         };
         let dict : HashMap<String, f64>   = serde_json::from_str(&fee_histo).unwrap();
         return Ok(dict);
@@ -411,7 +420,7 @@ pub fn convert_to_outpoint(utxo_str : &String) -> OutPoint{
     let vout : u32 =  parts[1].parse().unwrap();
     let mut byte_arr = hex_string_to_u8_array(parts[0]).unwrap();
     byte_arr.reverse();
-    let txid = Txid::from_slice(&byte_arr).expect("Invalid Txid");
+    let txid = Txid::from_slice(&byte_arr).expect("Error: Invalid transaction id.");
     let outpoint = OutPoint{
         txid : txid,
         vout : vout
@@ -461,17 +470,17 @@ pub fn chunk_and_label(final_str: &str, chunk_size: usize) -> Vec<String> {
         .collect() // Collect into a vector of strings
 }
 pub fn base64_to_hex(base64_input: &str) -> Result<String, &'static str> {
-    let bytes = base64::decode(base64_input).map_err(|_| "Invalid Base64 input")?;
+    let bytes = base64::decode(base64_input).map_err(|_| "Error: Invalid base64 input.")?;
     let hex_string = hex::encode(bytes);
     Ok(hex_string)
 }
 pub fn extract_u16s(input: &str) -> Result<(u16, u16), &'static str> {
         let parts: Vec<&str> = input.split('/').collect();
         if parts.len() != 3 {
-            return Err("Invalid format");
+            return Err("Error: Invalid format.");
         }
-        let first_u16 = parts[1].parse::<u16>().map_err(|_| "Failed to parse first number")?;
-        let second_u16 = parts[2].parse::<u16>().map_err(|_| "Failed to parse second number")?;
+        let first_u16 = parts[1].parse::<u16>().map_err(|_| "Error: Failed to parse first number.")?;
+        let second_u16 = parts[2].parse::<u16>().map_err(|_| "Error: Failed to parse second number.")?;
         Ok((first_u16, second_u16))
 }
 pub fn append_integers_as_bytes(vec: &mut Vec<u8>, addressdepth: u16, changedepth: u16, amount: u64) {
