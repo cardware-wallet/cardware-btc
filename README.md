@@ -10,7 +10,7 @@ All data that is transferred between the web wallet and the Cardware device is d
 
 Users must first pair the web wallet with their Cardware device.
 
-Once paired they are then able to view the address of their Cardware device, see their confirmed and unconfirmed balances and also send from their Cardware device.
+Once paired they are then able to view the BTC address of their Cardware device, see their confirmed and unconfirmed BTC balances and send BTC from their Cardware device.
 
 When sending, the watch only wallet will create an unsigned transaction which will be split up into QR codes. The user will then be prompted to scan these QRcodes with their Cardware device. The user will then confirm the transactions details which will then create a signed transaction which their Cardware device will split up into QR codes. The web wallet then scans these QR codes, decodes them and broadcasts the transaction.
 
