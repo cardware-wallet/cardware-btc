@@ -2,15 +2,17 @@
 
 This is the documentation for the BTC NPM package that communicates with the Cardware device.
 
+The library requires an electrs endpoint to query the bitcoin blockchain.
+
 It allows users to create a watch-only wallet on the web.
 
 All data that is transferred between the web wallet and the Cardware device is done through scanning QR codes.
 
-Users must first pair the their web wallet with their Cardware device.
+Users must first pair the web wallet with their Cardware device.
 
-Once paired they are then able to view the address of their Cardware device, see their confirmed and uncofirmed balances and also send from their device.
+Once paired they are then able to view the address of their Cardware device, see their confirmed and unconfirmed balances and also send from their Cardware device.
 
-When sending, the watch only wallet will create an unsigned transaction which will be split up into QR codes. The user will then be prompted to scan these QRcodes with their Cardware device. The user will then confirm the transactions details which will then create a signed transaction which their Cardware device will split up into QR codes. The web wallet then scans these QR codes, decodes them and then broadcasts the transaction.
+When sending, the watch only wallet will create an unsigned transaction which will be split up into QR codes. The user will then be prompted to scan these QRcodes with their Cardware device. The user will then confirm the transactions details which will then create a signed transaction which their Cardware device will split up into QR codes. The web wallet then scans these QR codes, decodes them and broadcasts the transaction.
 
 ---
 
@@ -28,14 +30,16 @@ import Wallet from 'cardware-btc';
 
 ## New Wallet
 
+This function initializes a wallet object in your web wallet. The xpub and the fingerprint are both received from the Cardware device after successfully pairing the web wallet and Cardware device. The pairing process involves scanning the **pair** QR codes from the Cardware device, extracting the xpub and fingerprint, then using them in creating the wallet object.
+
 ### Parameters
 
 | Parameter | Type | Description | Example |
 |---|---|---|---|
-| xpub | string | The xpub of the the hardware wallet. | "vpub5ZNhc5KKM6hACK6QDuo6UG1749XUeXf9Gbu8rcZQnNDeMJwUPrwzEVKsF7X7EzZe5yqwymfMA1tGJ9qAmjdmGHSkRW7SruCEDz9mgEkwWvN" |
-| esplora_url | string | The address of the esplora you are using. | "https://blockstream.info/testnet/api" |
-| fingerprint | string | The fingerprint used for identifying the correct xpub. | "fa436c5b" |
-| network | string | The network you are using (mainnet or testnet). | "mainnet" |
+| xpub | string | The xpub of the the hardware wallet. | ```"vpub5ZNhc5KKM6hACK6QDuo6UG1749XUeXf9Gbu8rcZQnNDeMJwUPrwzEVKsF7X7EzZe5yqwymfMA1tGJ9qAmjdmGHSkRW7SruCEDz9mgEkwWvN"``` |
+| esplora_url | string | The address of the esplora you are using. | ```"https://blockstream.info/testnet/api"``` |
+| fingerprint | string | The fingerprint used for identifying the correct xpub. | ```"fa436c5b"``` |
+| network | string | The network you are using (mainnet or testnet). | ```"mainnet"``` |
 
 ### Code
 
@@ -50,6 +54,8 @@ No outputs.
 ---
 
 ## Sync
+
+This function syncs your web wallet to make sure it has all the correct information to be able to get balances, construct unsigned transactions and broadcast transactions.
 
 ### Parameters
 
@@ -76,11 +82,13 @@ The output is a string.
 
 ## Sync to Depth
 
+This function syncs your web wallet with max depth as a parameter to make sure it has all the correct information to be able to get balances, construct unsigned transactions and broadcast transactions.
+
 ### Parameters
 
 | Parameter | Type | Description | Example |
 |---|---|---|---|
-| max_depth | string | The max depth of the addresses you need to sync. | "m/0/0" |
+| max_depth | string | The max depth of the addresses you need to sync. | ```"m/0/0"``` |
 
 ### Code
 
@@ -103,19 +111,21 @@ The output is a string.
 
 ## Fees
 
+This function estimates fees for a send transaction which takes a variable called **number of blocks** where the lower the number of blocks, the higher the estimated fee. Users can batch send transactions by populating multiple addresses and multiple amounts however the user must make sure both arrays have the same length.
+
 ### Parameters
 
 | Parameter | Type | Description | Example |
 |---|---|---|---|
-| addresses | array[string] | The addresses to send to. | ["tb1qvdl9rvg3m5ghfnppw2728rd92059pfqe0a8jjv"] |
-| amounts | array[int64] | The send amounts in satoshis. | [4500] |
-| number_of_blocks | int32 | The number of blocks for fee estimation. The lower the number, the higher the fee. | 3 |
+| addresses | array[string] | The addresses to send to. | ```["tb1qvdl9rvg3m5ghfnppw2728rd92059pfqe0a8jjv"]``` |
+| amounts | array[int64] | The send amounts in satoshis. | ```[4500]``` |
+| number_of_blocks | int32 | The number of blocks for fee estimation. The lower the number, the higher the fee. | ```3``` |
 
 
 ### Code
 
 ```javascript
-let fee = wallet.estimate_fee(addresses, amounts, number_of_blocks);
+let result = wallet.estimate_fee(addresses, amounts, number_of_blocks);
 ```
 
 ### Output
@@ -124,7 +134,7 @@ The output is a uint64.
 
 | Result | Description | Output |
 |---|---|---|
-| success | The fee estimation for a transaction.. | ```1120``` |
+| success | The fee estimation for a transaction (in satoshis). | ```1120``` |
 | error | The addresses array and the amounts array are not the same length. | ```0``` |
 | error | There is an issue parsing the network. | ```1``` |
 | error | There is an invalid recipient address. | ```2``` |
@@ -136,13 +146,15 @@ The output is a uint64.
 
 ## Send
 
+This function creates an unsigned transaction which it converts into a base64 string which it then splits up into chunks to be put into multiple QR codes. At the beginning of each chunk extra information is added. The extra information has the format of *(* + *index of QR code* + */* + *total QR codes* + *)* + *part of the unsigned transaction as a base64 string*.
+
 ### Parameters
 
 | Parameter | Type | Description | Example |
 |---|---|---|---|
-| addresses | array[string] | The addresses to send to. | ["tb1qvdl9rvg3m5ghfnppw2728rd92059pfqe0a8jjv"] |
-| amounts | array[int64] | The send amounts in satoshis. | [4500] |
-| fee | int64 | The transaction fee worked out in estimate_fee. | 1120 |
+| addresses | array[string] | The addresses to send to. | ```["tb1qvdl9rvg3m5ghfnppw2728rd92059pfqe0a8jjv"]``` |
+| amounts | array[int64] | The send amounts (in satoshis). | ```[4500]``` |
+| fee | int64 | The transaction fee worked out in estimate_fee (in satoshis). | ```1120``` |
 
 
 ### Code
@@ -157,7 +169,7 @@ The output is an array of strings.
 
 | Result | Description | Output |
 |---|---|---|
-| success | An array of base64 strings which can be shown as QR codes. | ```[, , , ]``` |
+| success | An array of base64 strings which can be shown as QR codes. | ```["(0/6)AgAAAAJCfJSUSIPEKOeG56APmMCEP6zPRPCz1/zyBsnFR5", "(1/6)gNNAAAAAAA/////4j8W+GTLq29Of7VdtqzMmkGpLJocgYd", "(2/6)1l/n4Crlse8vAAAAAAD/////AtAHAAAAAAAAFgAU3HfuEr", "(3/6)x48JEWN7r+DtOnmtCUXWBCWgAAAAAAABYAFDqbRFnVN17U", "(4/6)QpS10meSsPTXJy0mAAAAAA==:AAAAAOgDAAAAAAAAAAAAA", "(5/6)KhhAAAAAAAA"]``` |
 | error | The addresses array and the amounts array are not the same length. | ```["Error: Recipients and amounts arrays must be the same length."]```
 | error | The address is not associated with the BTC network. | ```["Error: Failed to parse network."]```
 | error | There is insufficient BTC to make this transaction. | ```["Error: Insufficient funds."]```
@@ -169,11 +181,13 @@ The output is an array of strings.
 
 ## Broadcast
 
+This function needs a signed transaction as a base64 string. It gets this by scanning the Cardware device. When scanning the QR codes of the signed transaction from the Cardware device it follows the format of *(* + *index of QR code* + */* + *total QR codes* + *)* + *part of the signed transaction as a base64 string*.
+
 ### Parameters
 
 | Parameter | Type | Description | Example |
 |---|---|---|---|
-| signed_transaction | string | The signed transaction that needs to be broadcasted | TODO |
+| signed_transaction | string | The signed transaction in base64 that needs to be broadcasted. | ```"AgAAAAABAUJ8lJRIg8Qo54bnoA+YwIQ/rM9E8LPX/PIGycVHmA00AQAAAAD/////AugDAAAAAAAAFgAUOptEWdU3XtRClLXSZ5Kw9NcnLSabIwAAAAAAABYAFDWIiG3dUA5i2rzZg529bq4aQWPFAkgwRQIhAPk1OEfut27Z/YZsu5Xeik10inhcYYfXDXFRkOnqz/Y8AiBvx0Uqw3q3+LV8MA/cJZKComCL/2r/zXIx9cay94JXIwEhA4HigQXlfm+OMUk3YXW5cGxWOYZqfPzF0dMNLyWSHw+FAAAAAA=="``` |
 
 ### Code
 
@@ -196,6 +210,8 @@ The output is a strings.
 ---
 
 ## Address
+
+This function returns the address of your Cardware device.
 
 ### Parameters
 
@@ -221,11 +237,13 @@ The output is a string.
 
 ## New Address
 
+This function returns the address of your Cardware device at a certain depth.
+
 ### Parameters
 
 | Parameter | Type | Description | Example |
 |---|---|---|---|
-| derivation_path | string | The derivation path the new address must be derived from. | "m/0/0" |
+| derivation_path | string | The derivation path the new address must be derived from. | ```"m/0/0"``` |
 
 ### Code
 
@@ -245,6 +263,8 @@ const result = wallet.new_address(derivation_path);
 
 ## Balance
 
+This function returns confirmed balance of your Cardware device.
+
 ### Parameters
 
 No parameters.
@@ -261,10 +281,12 @@ The output is a unint64.
 
 | Result | Description | Output |
 |---|---|---|
-| success | The confirmed balance of your wallet.| ```"69520"``` |
+| success | The confirmed balance of your wallet (in satoshis).| ```"69520"``` |
 ---
 
 ## Unconfirmed Balance
+
+This function returns unconfirmed balance of your Cardware device.
 
 ### Parameters
 
@@ -282,6 +304,6 @@ The output is a unint64.
 
 | Result | Description | Output |
 |---|---|---|
-| success | The unconfirmed balance of your wallet.| ```"4562"``` |
+| success | The unconfirmed balance of your wallet (in satoshis).| ```"4562"``` |
 
 ---
