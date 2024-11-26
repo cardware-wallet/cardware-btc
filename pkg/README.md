@@ -37,7 +37,7 @@ This function initializes a wallet object in your web wallet. The xpub and the f
 | Parameter | Type | Description | Example |
 |---|---|---|---|
 | xpub | string | The xpub of the the hardware wallet. | ```"vpub5ZNhc5KKM6hACK6QDuo6UG1749XUeXf9Gbu8rcZQnNDeMJwUPrwzEVKsF7X7EzZe5yqwymfMA1tGJ9qAmjdmGHSkRW7SruCEDz9mgEkwWvN"``` |
-| esplora_url | string | The address of the esplora you are using. | ```"https://blockstream.info/testnet/api"``` |
+| esplora_url | string | The address of the esplora you are using. | ```"https://blockstream.info/api"``` |
 | fingerprint | string | The fingerprint used for identifying the correct xpub. | ```"fa436c5b"``` |
 | network | string | The network you are using (mainnet or testnet). | ```"mainnet"``` |
 
@@ -117,8 +117,8 @@ This function estimates fees for a send transaction which takes a variable calle
 
 | Parameter | Type | Description | Example |
 |---|---|---|---|
-| addresses | array[string] | The addresses to send to. | ```["tb1qvdl9rvg3m5ghfnppw2728rd92059pfqe0a8jjv"]``` |
-| amounts | array[int64] | The send amounts in satoshis. | ```[4500]``` |
+| addresses | array[string] | The addresses to send to. | ```["bc1q82d5gkw4xa0dgs55khfx0y4s7ntjwtfxu4h4fg"]``` |
+| amounts | array[int64] | The send amounts in satoshis. | ```[1480]``` |
 | number_of_blocks | int32 | The number of blocks for fee estimation. The lower the number, the higher the fee. | ```3``` |
 
 
@@ -134,7 +134,7 @@ The output is a uint64.
 
 | Result | Description | Output |
 |---|---|---|
-| success | The fee estimation for a transaction (in satoshis). | ```1120``` |
+| success | The fee estimation for a transaction (in satoshis). | ```1480``` |
 | error | The addresses array and the amounts array are not the same length. | ```0``` |
 | error | There is an issue parsing the network. | ```1``` |
 | error | There is an invalid recipient address. | ```2``` |
@@ -152,9 +152,9 @@ This function creates an unsigned transaction which it converts into a base64 st
 
 | Parameter | Type | Description | Example |
 |---|---|---|---|
-| addresses | array[string] | The addresses to send to. | ```["tb1qvdl9rvg3m5ghfnppw2728rd92059pfqe0a8jjv"]``` |
-| amounts | array[int64] | The send amounts (in satoshis). | ```[4500]``` |
-| fee | int64 | The transaction fee worked out in estimate_fee (in satoshis). | ```1120``` |
+| addresses | array[string] | The addresses to send to. | ```["bc1q82d5gkw4xa0dgs55khfx0y4s7ntjwtfxu4h4fg"]``` |
+| amounts | array[int64] | The send amounts (in satoshis). | ```[1000]``` |
+| fee | int64 | The transaction fee worked out in estimate_fee (in satoshis). | ```1480``` |
 
 
 ### Code
@@ -201,7 +201,7 @@ The output is a strings.
 
 | Result | Description | Output |
 |---|---|---|
-| success | An array of base64 strings which can be shown as QR codes. | ```""``` |
+| success | The transaction ID of the broadcasted transaction. | ```"340d9847c5c906f2fcd7b3f044cfac3f84c0980fa0e786e728c4834894947c42"``` |
 | error | There is an issue parsing the base64 transaction string. | ```"Error: Failed to parse base64 transaction."```
 | error | There is an issue decoding the hex transaction.| ```"Error: Decoding failed."```
 | error | The signed transaction is invalid. | ```"Error: Invalid transaction."```
@@ -229,7 +229,7 @@ The output is a string.
 
 | Result | Description | Output |
 |---|---|---|
-| success | The address of the wallet. | ```"tb1qvdl9rvg3m5ghfnppw2728rd92059pfqe0a8jjv"``` |
+| success | The address of the wallet. | ```"bc1qxkygsmwa2q8x9k4umxpem0tw4cdyzc79kn5r5p"``` |
 | error | There is an invalid extended public key. | ```"Error: Invalid extended public key."``` |
 | error | There is an issue deriving the xpub. | ```"Error: Xpub derivation error."``` |
 
@@ -255,7 +255,7 @@ const result = wallet.new_address(derivation_path);
 
 | Result | Description | Output |
 |---|---|---|
-| success | The address of the wallet. | ```"tb1qvdl9rvg3m5ghfnppw2728rd92059pfqe0a8jjv"``` |
+| success | The address of the wallet. | ```"bc1qxkygsmwa2q8x9k4umxpem0tw4cdyzc79kn5r5p"``` |
 | error | There is an invalid extended public key. | ```"Error: Invalid extended public key."``` |
 | error | There is an issue deriving the xpub. | ```"Error: Xpub derivation error."``` |
 
@@ -281,7 +281,7 @@ The output is a unint64.
 
 | Result | Description | Output |
 |---|---|---|
-| success | The confirmed balance of your wallet (in satoshis).| ```"69520"``` |
+| success | The confirmed balance of your wallet (in satoshis).| ```"11225"``` |
 ---
 
 ## Unconfirmed Balance
@@ -304,6 +304,6 @@ The output is a unint64.
 
 | Result | Description | Output |
 |---|---|---|
-| success | The unconfirmed balance of your wallet (in satoshis).| ```"4562"``` |
+| success | The unconfirmed balance of your wallet (in satoshis).| ```"1000"``` |
 
 ---
