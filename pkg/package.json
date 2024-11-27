@@ -1,16 +1,32 @@
 {
-  "name": "bitcoin_lib",
-  "version": "0.1.0",
-  "files": [
-    "bitcoin_lib_bg.wasm",
-    "bitcoin_lib.js",
-    "bitcoin_lib_bg.js",
-    "bitcoin_lib.d.ts"
+  "name": "cardware-btc",
+  "collaborators": [
+    "Cardware Wallet (Pty) Ltd"
   ],
-  "module": "bitcoin_lib.js",
-  "types": "bitcoin_lib.d.ts",
+  "description": "The official BTC library for interacting with a Cardware device through web.",
+  "version": "1.0.0",
+  "license": "GPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cardware-wallet/cardware-btc"
+  },
+  "files": [
+    "cardware_btc_bg.wasm",
+    "cardware_btc.js",
+    "cardware_btc_bg.js",
+    "cardware_btc.d.ts"
+  ],
+  "module": "cardware_btc.js",
+  "homepage": "https://cardwarewallet.com",
+  "types": "cardware_btc.d.ts",
   "sideEffects": [
-    "./bitcoin_lib.js",
+    "./cardware_btc.js",
     "./snippets/*"
+  ],
+  "keywords": [
+    "bitcoin",
+    "wallet",
+    "cardware",
+    "cardware-wallet"
   ]
 }
