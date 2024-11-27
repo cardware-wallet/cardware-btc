@@ -1,7 +1,14 @@
 [package]
-name = "bitcoin_lib"
-version = "0.1.0"
+name = "cardware-btc"
+version = "1.0.0"
 edition = "2021"
+license = "GPL-3.0-only"
+description = "This is the official BTC library for interacting with a Cardware device through web."
+authors = ["Cardware Wallet (Pty) Ltd"]
+homepage = "https://cardwarewallet.com"
+repository = "https://github.com/cardware-wallet/cardware-btc"
+keywords = ["bitcoin", "wallet", "cardware", "cardware-wallet"]
+readme = "README.md"
 
 [lib]
 crate-type = ["cdylib","rlib"]
