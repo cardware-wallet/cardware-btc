@@ -246,7 +246,7 @@ impl Wallet{
         let _ = unsigned_tx.consensus_encode(&mut serialized_tx);
 
         let final_str = base64::encode(&serialized_tx) + ":"+&base64::encode(&segwit_ed);
-        return chunk_and_label(&final_str,46);
+        return chunk_and_label(&final_str,40);
     }
     pub fn estimate_fee(&self,recipient_addrs : Vec<String>, amounts : Vec<u64>, number_of_blocks : i32) -> u64{
         let mut txin_vec = Vec::new();
