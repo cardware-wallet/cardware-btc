@@ -1,4 +1,4 @@
-use bitcoin_lib::Wallet;
+use cardware_btc::Wallet;
 
 #[tokio::main]
 async fn main() {
