@@ -337,10 +337,9 @@ impl Wallet{
         if let  Some(value) = dict.get(&number_of_blocks.to_string()) {
             fee_est = *value;
         }
-        //fee_est = fee_est;
+        fee_est = fee_est*((serialized_tx.len() as f64) + (txin_vec.len() as f64)*72.0);
         let fee_int = fee_est as i32;
         let mut fee_64 : u64 = fee_int as u64;
-        fee_64 = fee_64 * ((serialized_tx.len() as u64) + (txin_vec.len() as u64) * 72);
         return fee_64;
     }
     pub fn set_trusted_pending(&mut self, utxo_vec : Vec<String>){
