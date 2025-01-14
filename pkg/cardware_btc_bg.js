@@ -318,7 +318,7 @@ export class Wallet {
         return this;
     }
     /**
-    * @returns {Promise<void>}
+    * @returns {Promise<string>}
     */
     sync() {
         const ret = wasm.wallet_sync(this.__wbg_ptr);
