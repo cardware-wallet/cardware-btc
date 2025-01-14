@@ -12,9 +12,9 @@ export class Wallet {
 */
   constructor(xpub: string, esplora_url: string, fingerprint: string, network: string);
 /**
-* @returns {Promise<void>}
+* @returns {Promise<string>}
 */
-  sync(): Promise<void>;
+  sync(): Promise<string>;
 /**
 * @param {string} max_depth
 * @returns {Promise<string>}

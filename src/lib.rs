@@ -54,8 +54,8 @@ impl Wallet{
             fee_estimates : None,
         }
     }
-    pub async fn sync(&mut self){
-        self.sync_to_depth("m/0/0".to_string()).await;
+    pub async fn sync(&mut self) -> String{
+        return self.sync_to_depth("m/0/0".to_string()).await;
     }
     pub async fn sync_to_depth(&mut self, max_depth : String) -> String{
         let fee_sync = match self.fetch_fee_estimates().await{
