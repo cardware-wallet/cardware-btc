@@ -7,10 +7,9 @@ export class Wallet {
 /**
 * @param {string} xpub
 * @param {string} esplora_url
-* @param {string} fingerprint
 * @param {string} network
 */
-  constructor(xpub: string, esplora_url: string, fingerprint: string, network: string);
+  constructor(xpub: string, esplora_url: string, network: string);
 /**
 * @returns {Promise<string>}
 */
