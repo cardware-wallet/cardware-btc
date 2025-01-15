@@ -10,25 +10,14 @@ use bitcoin::blockdata::transaction::OutPoint;
 use bitcoin::hashes::Hash;
 use bitcoin::absolute::LockTime;
 use bitcoin::consensus::Encodable;
-use bitcoin::psbt::Psbt;
-use std::ffi::c_char;
-use std::mem::transmute;
-use std::ffi::CStr;
 use std::str;
-use std::ffi::CString;
-use base64::{encode as b64_encode, decode as b64_decode};
-use bitcoin::consensus::encode;
 use bitcoin::consensus::encode::deserialize;
-use bitcoin::bip32::{Xpub, DerivationPath, ChildNumber,Fingerprint};
-use bitcoin::hashes::hash160;
-use bitcoin::secp256k1::PublicKey;
-use hex::{encode, decode};
+use bitcoin::bip32::{Xpub, DerivationPath};
 
 //Main Wallet Object
 #[wasm_bindgen]
 pub struct Wallet{
     esplora_url : String,
-    fingerprint : String,
     xpub : String,
     network : String,
     btc : u64,
@@ -41,10 +30,9 @@ pub struct Wallet{
 #[wasm_bindgen]
 impl Wallet{
     #[wasm_bindgen(constructor)]
-    pub fn new(xpub :String, esplora_url : String, fingerprint : String, network : String) -> Wallet {
+    pub fn new(xpub :String, esplora_url : String, network : String) -> Wallet {
         Wallet { 
             esplora_url : esplora_url,
-            fingerprint : fingerprint,
             xpub : xpub,
             network : network,
             btc : 0,
@@ -69,7 +57,9 @@ impl Wallet{
         let mut unconf = 0;
         for derivation in derivations{
             let client = reqwest::Client::new();
-            let url_str = format!("{}/address/{}/utxo",&self.esplora_url,&self.new_address(&derivation));
+            let new_addr = &self.new_address(&derivation);
+            if new_addr == "Error: Invalid extended public key." { return new_addr.to_string();}
+            let url_str = format!("{}/address/{}/utxo",&self.esplora_url,new_addr);
             let response = match client
                 .get(url_str)
                 .send()
@@ -141,7 +131,7 @@ impl Wallet{
             Err(_) => return "Error: Decoding failed.".to_string(),
         };
         let txid_str = match deserialize::<bitcoin::Transaction>(&tx_bytes){
-            Ok(tx) =>tx.txid().to_string(),
+            Ok(tx) =>tx.compute_txid().to_string(),
             Err(_) => return "Error: Invalid transaction.".to_string(),
         };
         match client
@@ -201,7 +191,7 @@ impl Wallet{
             txin_vec.push(txin);
             match extract_u16s(&utxo.derivation_path) {
                 Ok((first, second)) => append_integers_as_bytes(&mut segwit_ed,first,second,utxo.btc),
-                Err(e) => return vec!["Error: Derivation path error.".to_string()],
+                Err(_) => return vec!["Error: Derivation path error.".to_string()],
             }
             if total_spend > total_amount + fee{
                 break;
@@ -339,7 +329,7 @@ impl Wallet{
         }
         fee_est = fee_est*((serialized_tx.len() as f64) + (txin_vec.len() as f64)*72.0);
         let fee_int = fee_est as i32;
-        let mut fee_64 : u64 = fee_int as u64;
+        let fee_64 : u64 = fee_int as u64;
         return fee_64;
     }
     pub fn set_trusted_pending(&mut self, utxo_vec : Vec<String>){
@@ -364,6 +354,7 @@ impl Wallet{
     pub fn new_address(&self, derivation_path : &str)-> String{
         let network = self.get_network();
         let xpub_str = convert_to_xpub(self.xpub.clone());
+        if xpub_str == "Error: Invalid extended public key." { return xpub_str}
         let xpub = match Xpub::from_str(&xpub_str){
             Ok(xpub) => xpub,
             Err(_) => return "Error: Invalid extended public key.".to_string(),
@@ -405,7 +396,10 @@ impl Wallet{
 
 //Helper functions
 pub fn convert_to_xpub(xpub_str : String) -> String{
-    let zpub_bytes = bs58::decode(&xpub_str).with_check(None).into_vec().unwrap();
+    let zpub_bytes = match bs58::decode(&xpub_str).with_check(None).into_vec(){
+        Ok(zpub_bytes) => zpub_bytes,
+        Err(_) => return "Error: Invalid extended public key.".to_string(),
+    };
     let new_bytes = &zpub_bytes[4..];
     let new_prefix = hex_to_vec("0488b21e").unwrap();
     let mut vec = Vec::from(new_bytes);

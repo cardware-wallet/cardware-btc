@@ -301,19 +301,16 @@ export class Wallet {
     /**
     * @param {string} xpub
     * @param {string} esplora_url
-    * @param {string} fingerprint
     * @param {string} network
     */
-    constructor(xpub, esplora_url, fingerprint, network) {
+    constructor(xpub, esplora_url, network) {
         const ptr0 = passStringToWasm0(xpub, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
         const ptr1 = passStringToWasm0(esplora_url, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len1 = WASM_VECTOR_LEN;
-        const ptr2 = passStringToWasm0(fingerprint, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const ptr2 = passStringToWasm0(network, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len2 = WASM_VECTOR_LEN;
-        const ptr3 = passStringToWasm0(network, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len3 = WASM_VECTOR_LEN;
-        const ret = wasm.wallet_new(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3);
+        const ret = wasm.wallet_new(ptr0, len0, ptr1, len1, ptr2, len2);
         this.__wbg_ptr = ret >>> 0;
         return this;
     }
@@ -743,8 +740,8 @@ export function __wbindgen_memory() {
     return addHeapObject(ret);
 };
 
-export function __wbindgen_closure_wrapper584(arg0, arg1, arg2) {
-    const ret = makeMutClosure(arg0, arg1, 213, __wbg_adapter_24);
+export function __wbindgen_closure_wrapper575(arg0, arg1, arg2) {
+    const ret = makeMutClosure(arg0, arg1, 205, __wbg_adapter_24);
     return addHeapObject(ret);
 };
 
