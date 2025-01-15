@@ -30,7 +30,7 @@ import Wallet from 'cardware-btc';
 
 ## New Wallet
 
-This function initializes a wallet object in your web wallet. The xpub and the fingerprint are both received from the Cardware device after successfully pairing the web wallet and Cardware device. The pairing process involves scanning the **pair** QR codes from the Cardware device, extracting the xpub and fingerprint, then using them in creating the wallet object.
+This function initializes a wallet object in your web wallet. The xpub is received from the Cardware device after successfully pairing the web wallet and Cardware device. The pairing process involves scanning the **pair** QR codes from the Cardware device, extracting the xpub, then using it in creating the wallet object.
 
 ### Parameters
 
@@ -38,13 +38,12 @@ This function initializes a wallet object in your web wallet. The xpub and the f
 |---|---|---|---|
 | xpub | string | The xpub of the the hardware wallet. | ```"vpub5ZNhc5KKM6hACK6QDuo6UG1749XUeXf9Gbu8rcZQnNDeMJwUPrwzEVKsF7X7EzZe5yqwymfMA1tGJ9qAmjdmGHSkRW7SruCEDz9mgEkwWvN"``` |
 | esplora_url | string | The address of the esplora you are using. | ```"https://blockstream.info/api"``` |
-| fingerprint | string | The fingerprint used for identifying the correct xpub. | ```"fa436c5b"``` |
 | network | string | The network you are using (mainnet or testnet). | ```"mainnet"``` |
 
 ### Code
 
 ```javascript
-var wallet = await new Wallet(xpub, esplora_url, fingerprint, network);
+var wallet = await new Wallet(xpub, esplora_url, network);
 ```
 
 ### Output
@@ -138,7 +137,7 @@ The output is a uint64.
 | error | The addresses array and the amounts array are not the same length. | ```0``` |
 | error | There is an issue parsing the network. | ```1``` |
 | error | There is an invalid recipient address. | ```2``` |
-| error | There is an issue fetching the fee estimates.. | ```3``` |
+| error | There is an issue fetching the fee estimates. | ```3``` |
 | error | There is insufficient BTC to make this transaction. | ```4``` |
 | error | There are no UTXOs to spend. | ```5``` |
 
