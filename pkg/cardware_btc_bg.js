@@ -276,7 +276,7 @@ function handleError(f, args) {
         wasm.__wbindgen_exn_store(addHeapObject(e));
     }
 }
-function __wbg_adapter_85(arg0, arg1, arg2, arg3) {
+function __wbg_adapter_86(arg0, arg1, arg2, arg3) {
     wasm.wasm_bindgen__convert__closures__invoke2_mut__h3b961219945d4f1f(arg0, arg1, addHeapObject(arg2), addHeapObject(arg3));
 }
 
@@ -376,6 +376,14 @@ export class Wallet {
         const ptr1 = passArray64ToWasm0(amounts, wasm.__wbindgen_malloc);
         const len1 = WASM_VECTOR_LEN;
         const ret = wasm.wallet_estimate_fee(this.__wbg_ptr, ptr0, len0, ptr1, len1, number_of_blocks);
+        return BigInt.asUintN(64, ret);
+    }
+    /**
+    * @param {number} number_of_blocks
+    * @returns {bigint}
+    */
+    estimate_sweep_fee(number_of_blocks) {
+        const ret = wasm.wallet_estimate_sweep_fee(this.__wbg_ptr, number_of_blocks);
         return BigInt.asUintN(64, ret);
     }
     /**
@@ -666,7 +674,7 @@ export function __wbg_new_81740750da40724f(arg0, arg1) {
             const a = state0.a;
             state0.a = 0;
             try {
-                return __wbg_adapter_85(a, state0.b, arg0, arg1);
+                return __wbg_adapter_86(a, state0.b, arg0, arg1);
             } finally {
                 state0.a = a;
             }
@@ -740,7 +748,7 @@ export function __wbindgen_memory() {
     return addHeapObject(ret);
 };
 
-export function __wbindgen_closure_wrapper576(arg0, arg1, arg2) {
+export function __wbindgen_closure_wrapper579(arg0, arg1, arg2) {
     const ret = makeMutClosure(arg0, arg1, 205, __wbg_adapter_24);
     return addHeapObject(ret);
 };

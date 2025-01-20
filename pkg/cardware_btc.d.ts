@@ -39,6 +39,11 @@ export class Wallet {
 */
   estimate_fee(recipient_addrs: (string)[], amounts: BigUint64Array, number_of_blocks: number): bigint;
 /**
+* @param {number} number_of_blocks
+* @returns {bigint}
+*/
+  estimate_sweep_fee(number_of_blocks: number): bigint;
+/**
 * @param {(string)[]} utxo_vec
 */
   set_trusted_pending(utxo_vec: (string)[]): void;
