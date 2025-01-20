@@ -108,9 +108,9 @@ The output is a string.
 
 ---
 
-## Fees
+## Estimate Fees
 
-This function estimates fees for a send transaction which takes a variable called **number of blocks** where the lower the number of blocks, the higher the estimated fee. Users can batch send transactions by populating multiple addresses and multiple amounts however the user must make sure both arrays have the same length.
+This function estimates fees for a send transaction which takes a variable called **number of blocks** where the lower the number of blocks, the higher the estimated fee and the faster the transaction will confirm. Users can batch send transactions by populating multiple addresses and multiple amounts however the user must make sure both arrays have the same length.
 
 ### Parameters
 
@@ -143,6 +143,35 @@ The output is a uint64.
 
 ---
 
+## Estimate Sweep Fees
+
+This function estimates fees for a max send transaction which takes a variable called **number of blocks** where the lower the number of blocks, the higher the estimated fee and the faster the transaction will confirm. This is called a sweep when a user wants to empty their wallet.
+
+### Parameters
+
+| Parameter | Type | Description | Example |
+|---|---|---|---|
+| number_of_blocks | int32 | The number of blocks for fee estimation. The lower the number, the higher the fee. | ```3``` |
+
+### Code
+
+```javascript
+let result = wallet.estimate_sweep_fee(number_of_blocks);
+```
+
+### Output
+
+The output is a uint64.
+
+| Result | Description | Output |
+|---|---|---|
+| success | The fee estimation for a transaction (in satoshis). | ```1480``` |
+| error | There is an issue parsing the network. | ```1``` |
+| error | There is an issue fetching the fee estimates. | ```3``` |
+| error | There are no UTXOs to spend. | ```5``` |
+
+---
+
 ## Send
 
 This function creates an unsigned transaction which it converts into a base64 string which it then splits up into chunks to be put into multiple QR codes. At the beginning of each chunk extra information is added. The extra information has the format of *(* + *index of QR code* + */* + *total QR codes* + *)* + *part of the unsigned transaction as a base64 string*.
@@ -171,6 +200,7 @@ The output is an array of strings.
 | success | An array of base64 strings which can be shown as QR codes. | ```["(0/6)AgAAAAJCfJSUSIPEKOeG56APmMCEP6zPRPCz1/zyBsnFR5", "(1/6)gNNAAAAAAA/////4j8W+GTLq29Of7VdtqzMmkGpLJocgYd", "(2/6)1l/n4Crlse8vAAAAAAD/////AtAHAAAAAAAAFgAU3HfuEr", "(3/6)x48JEWN7r+DtOnmtCUXWBCWgAAAAAAABYAFDqbRFnVN17U", "(4/6)QpS10meSsPTXJy0mAAAAAA==:AAAAAOgDAAAAAAAAAAAAA", "(5/6)KhhAAAAAAAA"]``` |
 | error | The addresses array and the amounts array are not the same length. | ```["Error: Recipients and amounts arrays must be the same length."]```
 | error | The address is not associated with the BTC network. | ```["Error: Failed to parse network."]```
+| error | The send amount is under the dust limit of 546. | ```["Error: Send amount under dust limit."]```
 | error | There is insufficient BTC to make this transaction. | ```["Error: Insufficient funds."]```
 | error | There are no UTXOs to spend. | ```["Error: No UTXOs to spend."]```
 | error | There is an issue with the derivation path. | ```["Error: Derivation path error."]```
