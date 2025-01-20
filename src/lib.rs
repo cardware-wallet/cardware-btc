@@ -172,7 +172,7 @@ impl Wallet{
         for amount in &amounts{
             total_amount += amount;
             if amount <= &dust_limit {
-                return vec!["Error: Output under dust limit.".to_string()];
+                return vec!["Error: Send amount under dust limit.".to_string()];
             }
         }
         if total_amount + fee > self.btc {
@@ -219,8 +219,6 @@ impl Wallet{
             txout_vec.push(output);
             amt_index += 1;
         }
-        
-
         let change_amt = total_spend - (total_amount+fee);
         if change_amt > dust_limit { //Don't include dust outputs, simply add to tx fee
             let change = TxOut{
@@ -229,8 +227,6 @@ impl Wallet{
             };
             txout_vec.push(change);
         }
-
-
         let locktime = LockTime::from_height(0).expect("Zero always valid.");
         let unsigned_tx = Transaction{
             version: bitcoin::transaction::Version(2),
@@ -240,7 +236,6 @@ impl Wallet{
         };
         let mut serialized_tx = Vec::new();
         let _ = unsigned_tx.consensus_encode(&mut serialized_tx);
-
         let final_str = base64::encode(&serialized_tx) + ":"+&base64::encode(&segwit_ed);
         return chunk_and_label(&final_str,40);
     }
