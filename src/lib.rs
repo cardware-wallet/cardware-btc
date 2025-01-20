@@ -150,11 +150,12 @@ impl Wallet{
             }
     }
     pub fn send(&self, recipient_addrs : Vec<String>, amounts : Vec<u64>, fee : u64) -> Vec<String>{
+        let dust_limit : u64 = 546;
+        let network = self.get_network();
+        let address_str = &self.address();
         let mut txin_vec = Vec::new();
         let mut txout_vec = Vec::new();
         let mut segwit_ed : Vec<u8> = Vec::new();
-        let network = self.get_network();
-        let address_str = &self.address();
         if amounts.len() != recipient_addrs.len(){
             return vec!["Error: Recipients and amounts arrays must be the same length.".to_string()];
         }
@@ -170,6 +171,9 @@ impl Wallet{
         let mut total_amount : u64 = 0;
         for amount in &amounts{
             total_amount += amount;
+            if amount <= &dust_limit {
+                return vec!["Error: Send amount under dust limit.".to_string()];
+            }
         }
         if total_amount + fee > self.btc {
             return vec!["Error: Insufficient funds.".to_string()];
@@ -215,16 +219,14 @@ impl Wallet{
             txout_vec.push(output);
             amt_index += 1;
         }
-        
-
         let change_amt = total_spend - (total_amount+fee);
-        let change = TxOut{
-            value : Amount::from_sat(change_amt),
-            script_pubkey: my_address.script_pubkey(),
-        };
-        txout_vec.push(change);
-
-
+        if change_amt > dust_limit { //Don't include dust outputs, simply add to tx fee
+            let change = TxOut{
+                value : Amount::from_sat(change_amt),
+                script_pubkey: my_address.script_pubkey(),
+            };
+            txout_vec.push(change);
+        }
         let locktime = LockTime::from_height(0).expect("Zero always valid.");
         let unsigned_tx = Transaction{
             version: bitcoin::transaction::Version(2),
@@ -234,7 +236,6 @@ impl Wallet{
         };
         let mut serialized_tx = Vec::new();
         let _ = unsigned_tx.consensus_encode(&mut serialized_tx);
-
         let final_str = base64::encode(&serialized_tx) + ":"+&base64::encode(&segwit_ed);
         return chunk_and_label(&final_str,40);
     }
