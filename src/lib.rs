@@ -333,6 +333,62 @@ impl Wallet{
         let fee_64 : u64 = fee_int as u64;
         return fee_64;
     }
+    pub fn estimate_sweep_fee(&self, number_of_blocks :i32) -> u64{
+        let mut txin_vec = Vec::new();
+        let mut txout_vec = Vec::new();
+        let network = self.get_network();
+        let address_str = &self.address();
+
+        let my_address : Address<NetworkChecked> = match Address::from_str(address_str){
+            Ok(rec) =>  {
+                match rec.require_network(network){
+                    Ok(checked) => checked,
+                    Err(_) => return 1,
+                }
+            }
+            Err(_) => return 1,
+        };
+        let my_utxos = match &self.utxos{
+            Some(utxos)=>utxos,
+            None=> return 5, //No Utxos
+        };
+        for utxo in my_utxos{
+            let outpoint = convert_to_outpoint(&utxo.utxo);
+            let txin = TxIn{
+                previous_output : outpoint,
+                script_sig : ScriptBuf::new(),
+                sequence: Sequence::MAX,
+                witness: Witness::new(),
+            };
+            txin_vec.push(txin);
+        }
+        let output  =  TxOut{
+            value : Amount::from_sat(1000),
+            script_pubkey: my_address.script_pubkey(),
+        };
+        txout_vec.push(output);
+        let locktime = LockTime::from_height(0).expect("valid height");
+        let unsigned_tx = Transaction{
+            version: bitcoin::transaction::Version(2),
+            lock_time : locktime.into(),
+            input : txin_vec.clone(),
+            output : txout_vec.clone(),
+        };
+        let mut serialized_tx = Vec::new();
+        let _ = unsigned_tx.consensus_encode(&mut serialized_tx);
+        let mut fee_est : f64 = 0.0;
+        let dict = match &self.fee_estimates{
+            Some(dict) => dict,
+            None => return 3,//Need to sync error
+        };
+        if let  Some(value) = dict.get(&number_of_blocks.to_string()) {
+            fee_est = *value;
+        }
+        fee_est = fee_est*((serialized_tx.len() as f64) + (txin_vec.len() as f64)*72.0);
+        let fee_int = fee_est as i32;
+        let fee_64 : u64 = fee_int as u64;
+        return fee_64;   
+    }
     pub fn set_trusted_pending(&mut self, utxo_vec : Vec<String>){
         self.trusted_pending = Some(utxo_vec);
     }
