@@ -2,9 +2,9 @@ use cardware_btc::Wallet;
 
 #[tokio::main]
 async fn main() {
-    let mut wal = Wallet::new("vpub5ZNhc5KKM6hACK6QDuo6UG1749XUeXf9Gbu8rcZQnNDeMJwUPrwzEVKsF7X7EzZe5yqwymfMA1tGJ9qAmjdmGHSkRW7SruCEDz9mgEkwWvN".to_string(),
-                              "https://blockstream.info/testnet/api".to_string(),
-                              "testnet".to_string());
+    let mut wal = Wallet::new("zpub6qZke5jbex3WoeqEe8CrBbVozHzsJarGAjh5nKhdaKGNRAWn868QrMbjGLw51dJYEGwBok6iGYx2H3fkZFL9cxvJnKFaaSNzAsMvYJkeQgE".to_string(),
+                              "https://btc.cardwarewallet.com".to_string(),
+                              "bitcoin".to_string());
     
     println!("wallet addr: {:?}",wal.address());
     println!("wallet addr: {:?}",wal.new_address("m/0/0"));
@@ -13,12 +13,14 @@ async fn main() {
     println!("sync res {:?}",sync_res);
     println!("wallet btc: {:?}",wal.balance());
     let recipient_arr = vec![
-        "tb1qvdl9rvg3m5ghfnppw2728rd92059pfqe0a8jjv".to_string(),
+        "bc1qsdmunxzu8e0fsexufdmrvkje22plshe8dye509".to_string(),
     ];
-    let amount_arr = vec![4500];
-    let fee = wal.estimate_fee(recipient_arr.clone(),amount_arr.clone(),2);
+    let fee = wal.estimate_sweep_fee(2);
+    let amount_now = wal.balance() - fee;
+    let amount_arr = vec![amount_now];
     println!("fee {:?}",fee);
-    let res = wal.send(recipient_arr,amount_arr,550);
+    println!("amount now {:?}",amount_now);
+    let res = wal.send(recipient_arr,amount_arr,fee);
     println!("Res: {:?}",res);
 
 }
