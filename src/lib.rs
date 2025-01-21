@@ -272,17 +272,19 @@ impl Wallet{
             None=> return 5, //No Utxos
         };
         for utxo in my_utxos{
-            let outpoint = convert_to_outpoint(&utxo.utxo);
-            total_spend += utxo.btc;
-            let txin = TxIn{
-                previous_output : outpoint,
-                script_sig : ScriptBuf::new(),
-                sequence: Sequence::MAX,
-                witness: Witness::new(),
-            };
-            txin_vec.push(txin);
-            if total_spend > total_amount + fee{
-                break;
+            if utxo.confirmed{
+                let outpoint = convert_to_outpoint(&utxo.utxo);
+                total_spend += utxo.btc;
+                let txin = TxIn{
+                    previous_output : outpoint,
+                    script_sig : ScriptBuf::new(),
+                    sequence: Sequence::MAX,
+                    witness: Witness::new(),
+                };
+                txin_vec.push(txin);
+                if total_spend > total_amount + fee{
+                    break;
+                }
             }
         }
         let mut amt_index =0;
