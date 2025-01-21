@@ -184,21 +184,23 @@ impl Wallet{
             None=> return vec!["Error: No UTXOs to spend.".to_string()],
         };
         for utxo in my_utxos{
-            let outpoint = convert_to_outpoint(&utxo.utxo);
-            total_spend += utxo.btc;
-            let txin = TxIn{
-                previous_output : outpoint,
-                script_sig : ScriptBuf::new(),
-                sequence: Sequence::MAX,
-                witness: Witness::new(),
-            };
-            txin_vec.push(txin);
-            match extract_u16s(&utxo.derivation_path) {
-                Ok((first, second)) => append_integers_as_bytes(&mut segwit_ed,first,second,utxo.btc),
-                Err(_) => return vec!["Error: Derivation path error.".to_string()],
-            }
-            if total_spend > total_amount + fee{
-                break;
+            if utxo.confirmed {
+                let outpoint = convert_to_outpoint(&utxo.utxo);
+                total_spend += utxo.btc;
+                let txin = TxIn{
+                    previous_output : outpoint,
+                    script_sig : ScriptBuf::new(),
+                    sequence: Sequence::MAX,
+                    witness: Witness::new(),
+                };
+                txin_vec.push(txin);
+                match extract_u16s(&utxo.derivation_path) {
+                    Ok((first, second)) => append_integers_as_bytes(&mut segwit_ed,first,second,utxo.btc),
+                    Err(_) => return vec!["Error: Derivation path error.".to_string()],
+                }
+                if total_spend > total_amount + fee{
+                    break;
+                }
             }
         }
         let mut amt_index =0;
@@ -353,14 +355,16 @@ impl Wallet{
             None=> return 5, //No Utxos
         };
         for utxo in my_utxos{
-            let outpoint = convert_to_outpoint(&utxo.utxo);
-            let txin = TxIn{
-                previous_output : outpoint,
-                script_sig : ScriptBuf::new(),
-                sequence: Sequence::MAX,
-                witness: Witness::new(),
-            };
-            txin_vec.push(txin);
+            if utxo.confirmed {
+                let outpoint = convert_to_outpoint(&utxo.utxo);
+                let txin = TxIn{
+                    previous_output : outpoint,
+                    script_sig : ScriptBuf::new(),
+                    sequence: Sequence::MAX,
+                    witness: Witness::new(),
+                };
+                txin_vec.push(txin);
+            }
         }
         let output  =  TxOut{
             value : Amount::from_sat(1000),
