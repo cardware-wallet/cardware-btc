@@ -20,7 +20,7 @@ Once homebrew is installed you can install LLVM using the command:
 
 Ensure the C-Linker is available to the Rust Compiler by using an export:
 
-	export TARGET_CC=/opt/homebrew/Cellar/llvm/17.0.6_1/bin/clang-17
+	export TARGET_CC=/opt/homebrew/Cellar/llvm/18.1.8/bin/clang-18
 
 It is important to note that the path to llvm can change depending on version number and the users OS.
 

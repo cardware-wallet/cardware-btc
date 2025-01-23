@@ -242,6 +242,7 @@ impl Wallet{
         return chunk_and_label(&final_str,40);
     }
     pub fn estimate_fee(&self,recipient_addrs : Vec<String>, amounts : Vec<u64>, number_of_blocks : i32) -> u64{
+        let dust_limit : u64 = 546;
         let mut txin_vec = Vec::new();
         let mut txout_vec = Vec::new();
         let network = self.get_network();
@@ -308,11 +309,16 @@ impl Wallet{
         
 
         let change_amt = total_spend - (total_amount+fee);
-        let change = TxOut{
-            value : Amount::from_sat(change_amt),
-            script_pubkey: my_address.script_pubkey(),
-        };
-        txout_vec.push(change);
+        let mut dust_adjustment : u64= 0;
+        if change_amt > dust_limit {
+            let change = TxOut{
+                value : Amount::from_sat(change_amt),
+                script_pubkey: my_address.script_pubkey(),
+            };
+            txout_vec.push(change);
+        }else{
+            dust_adjustment = change_amt;
+        }
 
 
         let locktime = LockTime::from_height(0).expect("valid height");
@@ -335,7 +341,7 @@ impl Wallet{
         fee_est = fee_est*((serialized_tx.len() as f64) + (txin_vec.len() as f64)*72.0);
         let fee_int = fee_est as i32;
         let fee_64 : u64 = fee_int as u64;
-        return fee_64;
+        return fee_64 + dust_adjustment;
     }
     pub fn estimate_sweep_fee(&self, number_of_blocks :i32) -> u64{
         let mut txin_vec = Vec::new();
