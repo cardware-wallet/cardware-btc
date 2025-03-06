@@ -15,7 +15,7 @@ use std::str;
 use bitcoin::consensus::encode::deserialize;
 use bitcoin::bip32::{Xpub, DerivationPath};
 use bitcoin::PublicKey;
-
+use bitcoin::Psbt;
 //Main Wallet Object
 #[wasm_bindgen]
 pub struct Wallet{
@@ -639,6 +639,36 @@ impl Wallet{
 }
 
 //Helper functions
+pub fn convert_psbt_to_qr(psbt_bytes: &[u8]) -> Vec<String>{
+    let mut segwit_ed : Vec<u8> = Vec::new();
+    let psbt: Psbt = match Psbt::deserialize(psbt_bytes){
+        Ok(psbt) => psbt,
+        Err(_) => return vec!["Error: Failed to deserialize PSBT.".to_string()],
+    };
+    let unsigned_tx = psbt.unsigned_tx;
+    let mut serialized_tx = Vec::new();
+    let _ = unsigned_tx.consensus_encode(&mut serialized_tx);
+    for input in psbt.inputs{
+        let witness_utxo = match input.witness_utxo{
+            Some(witness) => witness,
+            None => return vec!["Error: No witness UTXO.".to_string()],
+        };
+        for (pubkey, (fingerprint, derivation_path)) in input.bip32_derivation.iter() {
+            let deri_str = format!("{}",derivation_path);
+            let prefix = "84'/0'/0'";
+            let remaining = match deri_str.strip_prefix(prefix){
+                Some(rem) => rem,
+                None => return vec!["Error: Derivation path error.".to_string()],
+            };
+            match extract_u16s(&remaining) {
+                Ok((first, second)) => append_integers_as_bytes(&mut segwit_ed,first,second,witness_utxo.value.to_sat()),
+                Err(e) => return vec!["Error: Derivation path error.".to_string()],
+            }
+        }
+    }
+    let final_str = base64::encode(&serialized_tx) + ":"+&base64::encode(&segwit_ed);
+    return chunk_and_label(&final_str,40);
+}
 pub fn convert_to_xpub(xpub_str : String) -> String{
     let zpub_bytes = match bs58::decode(&xpub_str).with_check(None).into_vec(){
         Ok(zpub_bytes) => zpub_bytes,
