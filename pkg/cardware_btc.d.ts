@@ -5,11 +5,11 @@
 export class Wallet {
   free(): void;
 /**
-* @param {string} xpub
+* @param {(string)[]} xpubs
 * @param {string} esplora_url
 * @param {string} network
 */
-  constructor(xpub: string, esplora_url: string, network: string);
+  constructor(xpubs: (string)[], esplora_url: string, network: string);
 /**
 * @returns {Promise<string>}
 */
@@ -24,6 +24,11 @@ export class Wallet {
 * @returns {Promise<string>}
 */
   broadcast(transaction: string): Promise<string>;
+/**
+* @param {(string)[]} transaction_signatures
+* @returns {Promise<string>}
+*/
+  broadcast_multisig(transaction_signatures: (string)[]): Promise<string>;
 /**
 * @param {(string)[]} recipient_addrs
 * @param {BigUint64Array} amounts

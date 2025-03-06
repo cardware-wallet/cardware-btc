@@ -6,6 +6,7 @@ export function wallet_new(a: number, b: number, c: number, d: number, e: number
 export function wallet_sync(a: number): number;
 export function wallet_sync_to_depth(a: number, b: number, c: number): number;
 export function wallet_broadcast(a: number, b: number, c: number): number;
+export function wallet_broadcast_multisig(a: number, b: number, c: number): number;
 export function wallet_send(a: number, b: number, c: number, d: number, e: number, f: number, g: number): void;
 export function wallet_estimate_fee(a: number, b: number, c: number, d: number, e: number, f: number): number;
 export function wallet_estimate_sweep_fee(a: number, b: number): number;

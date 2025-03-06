@@ -1,6 +1,6 @@
 [package]
 name = "cardware-btc"
-version = "1.0.7"
+version = "1.0.8"
 edition = "2021"
 license = "GPL-3.0-only"
 description = "The official BTC library for interacting with a Cardware device through web."

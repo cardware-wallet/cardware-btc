@@ -7,18 +7,20 @@ use serde::{Deserialize,Serialize};
 use bitcoin::{Address,Txid,Transaction,TxIn,TxOut,Sequence,Witness,Amount,ScriptBuf,Network};
 use bitcoin::address::NetworkChecked;
 use bitcoin::blockdata::transaction::OutPoint;
+use bitcoin::blockdata::{opcodes, script::Builder};
 use bitcoin::hashes::Hash;
 use bitcoin::absolute::LockTime;
 use bitcoin::consensus::Encodable;
 use std::str;
 use bitcoin::consensus::encode::deserialize;
 use bitcoin::bip32::{Xpub, DerivationPath};
+use bitcoin::PublicKey;
 
 //Main Wallet Object
 #[wasm_bindgen]
 pub struct Wallet{
     esplora_url : String,
-    xpub : String,
+    xpubs : Vec<String>,
     network : String,
     btc : u64,
     unconfirmed : u64,
@@ -30,10 +32,10 @@ pub struct Wallet{
 #[wasm_bindgen]
 impl Wallet{
     #[wasm_bindgen(constructor)]
-    pub fn new(xpub :String, esplora_url : String, network : String) -> Wallet {
+    pub fn new(xpubs :Vec<String>, esplora_url : String, network : String) -> Wallet {
         Wallet { 
             esplora_url : esplora_url,
-            xpub : xpub,
+            xpubs : xpubs,
             network : network,
             btc : 0,
             unconfirmed : 0,
@@ -149,6 +151,86 @@ impl Wallet{
                 Err(_) => return "Error: Failed to broadcast transaction.".to_string(),
             }
     }
+    pub async fn broadcast_multisig(&mut self, transaction_signatures : Vec<String>) -> String{
+        let client = Client::new();
+        let mut tx_graph : Vec<bitcoin::Transaction> = Vec::new();
+        let mut pubkeys : Vec<PublicKey> = Vec::new();
+        for zpub in self.xpubs.iter().skip(1) {
+            let xpub_tmp_str = &convert_to_xpub(zpub.to_string()); //Xpub 1 
+            let xpub = match Xpub::from_str(&xpub_tmp_str){
+                Ok(xpub) => xpub,
+                Err(_) => return "Error: Xpub derivation error.".to_string(),
+            };
+            let derivation_path = DerivationPath::from_str("m/0/0").unwrap();
+            let derived_xpub = match xpub.derive_pub(&bitcoin::secp256k1::Secp256k1::new(), &derivation_path){
+                Ok(derived_xpub) => derived_xpub,
+                Err(_) => return "Error: Xpub derivation error.".to_string(),
+            };
+            let public_key = PublicKey::new(
+                derived_xpub.public_key
+            );
+            pubkeys.push(public_key);
+        }
+        pubkeys.sort_by(|a, b| a.to_bytes().cmp(&b.to_bytes()));
+        for t_sig in transaction_signatures{
+            let tx_hex_string = match base64_to_hex(&t_sig){
+                Ok(tx_hex_string) => tx_hex_string,
+                Err(_) => return "Error: Failed to parse base64 transaction.".to_string(),
+            };
+            let tx_bytes = match hex::decode(tx_hex_string.clone()){
+                Ok(tx_bytes) => tx_bytes,
+                Err(_) => return "Error: Decoding failed.".to_string(),
+            };
+            let tx = match deserialize::<bitcoin::Transaction>(&tx_bytes){
+                Ok(tx) =>tx,
+                Err(_) => return "Error: Invalid transaction.".to_string(),
+            };
+            tx_graph.push(tx);
+        }
+        let main_tx = tx_graph[0].clone();
+        let mut final_tx = tx_graph[0].clone();
+        let mut input_index = 0;
+        for input in main_tx.input{
+            let mut witness_items: Vec<Vec<u8>> = Vec::new();
+            witness_items.push(Vec::new()); 
+            let main_witness_vec = input.witness.to_vec();
+            if main_witness_vec.len() < 3{
+                return "Error: Invalid transaction signatures.".to_string()
+            }
+            for pubkey in &pubkeys{
+                for tx in &tx_graph{
+                    let witness_vec = tx.input[input_index].witness.to_vec();
+                    if witness_vec[1] == pubkey.to_bytes(){
+                        witness_items.push(witness_vec[0].clone());
+                    }
+                }
+            }
+            witness_items.push(main_witness_vec[2].clone());
+            let new_witness = Witness::from_slice(&witness_items);
+            final_tx.input[input_index].witness = new_witness;
+            input_index +=1;
+        }
+
+        let mut serialized_tx = Vec::new();
+        let _ = final_tx.consensus_encode(&mut serialized_tx);
+        
+        let tx_hex_string = array_to_hex(&serialized_tx);
+        let txid_str = final_tx.compute_txid().to_string();
+        match client
+            .post(format!("{}/tx",&self.esplora_url)) //.header(header::CONTENT_TYPE, "application/json")
+            .body(tx_hex_string)
+            .send()
+            .await{
+                Ok(_) => {
+                        //Add to trusted pending
+                        let mut tp = self.get_trusted_pending();
+                        tp.push(txid_str.clone());
+                        self.set_trusted_pending(tp);
+                        return txid_str;
+                    }
+                Err(_) => return "Error: Failed to broadcast transaction.".to_string(),
+            }
+    }
     pub fn send(&self, recipient_addrs : Vec<String>, amounts : Vec<u64>, fee : u64) -> Vec<String>{
         let dust_limit : u64 = 546;
         let network = self.get_network();
@@ -238,8 +320,53 @@ impl Wallet{
         };
         let mut serialized_tx = Vec::new();
         let _ = unsigned_tx.consensus_encode(&mut serialized_tx);
-        let final_str = base64::encode(&serialized_tx) + ":"+&base64::encode(&segwit_ed);
-        return chunk_and_label(&final_str,40);
+        if self.xpubs.len() == 1{
+            let final_str = base64::encode(&serialized_tx) + ":"+&base64::encode(&segwit_ed);
+            return chunk_and_label(&final_str,40);
+        }else if self.xpubs.len() > 1{
+            let parts : Vec<&str> = self.xpubs[0].split('/').collect();
+            if parts.len() != 2 {
+                return vec!["Error: Invalid multi-sig size and threshold, please use n/n eg. 2/3.".to_string()];
+            }
+            let threshold : i64 = match parts[0].parse() {
+                Ok(num) => num,
+                Err(_) => return vec!["Error: Invalid multi-sig size and threshold, please use n/n eg. 2/3.".to_string()],
+            };
+            let signers : i64 = match parts[1].parse() {
+                Ok(num) => num,
+                Err(_) => return vec!["Error: Invalid multi-sig size and threshold, please use n/n eg. 2/3.".to_string()],
+            };
+            let mut pubkeys : Vec<PublicKey> = Vec::new();
+            for zpub in self.xpubs.iter().skip(1) {
+                let xpub_tmp_str = &convert_to_xpub(zpub.to_string()); //Xpub 1 
+                let xpub = match Xpub::from_str(&xpub_tmp_str){
+                    Ok(xpub) => xpub,
+                    Err(_) => return vec!["Error: Xpub derivation error.".to_string()],
+                };
+                let derivation_path = DerivationPath::from_str("m/0/0").unwrap();
+                let derived_xpub = match xpub.derive_pub(&bitcoin::secp256k1::Secp256k1::new(), &derivation_path){
+                    Ok(derived_xpub) => derived_xpub,
+                    Err(_) => return vec!["Error: Xpub derivation error.".to_string()],
+                };
+                let public_key = PublicKey::new(
+                    derived_xpub.public_key
+                );
+                pubkeys.push(public_key);
+            }
+            pubkeys.sort_by(|a, b| a.to_bytes().cmp(&b.to_bytes()));
+            let mini_threshold : u8 = threshold as u8;
+            let mini_signers : u8 = signers as u8;
+            let mini_slice  = [mini_threshold,mini_signers];
+            let mut pubkey_bytes = Vec::new();
+            pubkey_bytes.extend_from_slice(&mini_slice);
+            for pk in pubkeys{
+                pubkey_bytes.extend_from_slice(pk.inner.serialize().as_slice());
+            }
+            let final_str = base64::encode(&serialized_tx) + ":"+&base64::encode(&segwit_ed)+":"+&base64::encode(&pubkey_bytes);
+            return chunk_and_label(&final_str,40);
+        }else{
+            return vec!["Error: Wallet requires at least one xpub.".to_string()];
+        }
     }
     pub fn estimate_fee(&self,recipient_addrs : Vec<String>, amounts : Vec<u64>, number_of_blocks : i32) -> u64{
         let dust_limit : u64 = 546;
@@ -422,24 +549,72 @@ impl Wallet{
     }
     pub fn new_address(&self, derivation_path : &str)-> String{
         let network = self.get_network();
-        let xpub_str = convert_to_xpub(self.xpub.clone());
-        if xpub_str == "Error: Invalid extended public key." { return xpub_str}
-        let xpub = match Xpub::from_str(&xpub_str){
-            Ok(xpub) => xpub,
-            Err(_) => return "Error: Invalid extended public key.".to_string(),
-        };
-        let derivation_path = DerivationPath::from_str(derivation_path).unwrap();
-        let derived_xpub = match xpub.derive_pub(&bitcoin::secp256k1::Secp256k1::new(), &derivation_path){
-            Ok(derived_xpub) => derived_xpub,
-            Err(_) => return "Error: Xpub derivation error.".to_string(),
-        };
-        let public_key = derived_xpub.to_pub();
-        let address = Address::p2wpkh(&public_key, network);
-        return format!("{:?}",address);
+        //Insert multi-sig changes here
+        if self.xpubs.len() == 1{
+            let xpub_str = convert_to_xpub(self.xpubs[0].clone());
+            if xpub_str == "Error: Invalid extended public key." { return xpub_str}
+            let xpub = match Xpub::from_str(&xpub_str){
+                Ok(xpub) => xpub,
+                Err(_) => return "Error: Invalid extended public key.".to_string(),
+            };
+            let derivation_path = DerivationPath::from_str(derivation_path).unwrap();
+            let derived_xpub = match xpub.derive_pub(&bitcoin::secp256k1::Secp256k1::new(), &derivation_path){
+                Ok(derived_xpub) => derived_xpub,
+                Err(_) => return "Error: Xpub derivation error.".to_string(),
+            };
+            let public_key = derived_xpub.to_pub();
+            let address = Address::p2wpkh(&public_key, network);
+            return format!("{:?}",address);
+        }else if self.xpubs.len() > 1{
+            //Multi sig
+            let parts : Vec<&str> = self.xpubs[0].split('/').collect();
+            if parts.len() != 2 {
+                return "Error: Invalid multi-sig size and threshold, please use n/n eg. 2/3.".to_string();
+            }
+            let threshold : i64 = match parts[0].parse() {
+                Ok(num) => num,
+                Err(_) => return "Error: Invalid multi-sig size and threshold, please use n/n eg. 2/3.".to_string(),
+            };
+            let signers : i64 = match parts[1].parse() {
+                Ok(num) => num,
+                Err(_) => return "Error: Invalid multi-sig size and threshold, please use n/n eg. 2/3.".to_string() ,
+            };
+            let mut pubkeys : Vec<PublicKey> = Vec::new();
+            for zpub in self.xpubs.iter().skip(1) {
+                let xpub_tmp_str = &convert_to_xpub(zpub.to_string()); //Xpub 1 
+                let xpub = match Xpub::from_str(&xpub_tmp_str){
+                    Ok(xpub) => xpub,
+                    Err(_) => return "Error: Xpub derivation error.".to_string(),
+                };
+                let derivation_path = DerivationPath::from_str("m/0/0").unwrap();
+                let derived_xpub = match xpub.derive_pub(&bitcoin::secp256k1::Secp256k1::new(), &derivation_path){
+                    Ok(derived_xpub) => derived_xpub,
+                    Err(_) => return "Error: Xpub derivation error.".to_string(),
+                };
+                let public_key = PublicKey::new(
+                    derived_xpub.public_key
+                );
+                pubkeys.push(public_key);
+            }
+            pubkeys.sort_by(|a, b| a.to_bytes().cmp(&b.to_bytes()));
+            let mut builder = Builder::new().push_int(threshold);
+            for pubkey in &pubkeys {
+                builder = builder.push_key(pubkey);
+            }
+            let witness_script = builder
+                .push_int(signers)
+                .push_opcode(opcodes::all::OP_CHECKMULTISIG)
+                .into_script();
+
+            let multisig_address = Address::p2wsh(&witness_script, Network::Bitcoin);
+            return format!("{:?}",multisig_address);
+        }else{
+            return "Error: Xpub list cannot be empty.".to_string();
+        }
     }
     //Helpers
     fn get_network(&self)->Network{
-        if self.network =="bitcoin"{
+        if self.network =="bitcoin" || self.network == "mainnet" || self.network == "Bitcoin" || self.network == "Mainnet" {
             return Network::Bitcoin;
         }else{ //Default to testnet if specification is wrong
             return Network::Testnet;
