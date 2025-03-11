@@ -241,7 +241,7 @@ The output is a strings.
 
 ## Broadcast Multisig
 
-This function needs an array of signed transactions as a list of base64 strings. It gets this by scanning the QR codes on the Cardware device. When scanning the QR codes of the signed transaction from the Cardware device it follows the format of *(* + *index of QR code* + */* + *total QR codes* + *)* + *part of the signed transaction as a base64 string*. A backend server is used to temporarily store the signed transactions until there are enough that are needed for the multisig to be valid. Then it broadcasts the transaction.
+This function needs an array of signed transactions as a list of base64 strings. It gets these by scanning the QR codes on the Cardware devices that are part of the multisig. When scanning the QR codes of the signed transaction from the Cardware device it follows the format of *(* + *index of QR code* + */* + *total QR codes* + *)* + *part of the signed transaction as a base64 string*.
 
 ### Parameters
 
