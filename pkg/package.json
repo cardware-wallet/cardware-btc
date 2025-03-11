@@ -8,7 +8,7 @@
   "license": "GPL-3.0-only",
   "repository": {
     "type": "git",
-    "url": "https://github.com/cardware-wallet/cardware-btc"
+    "url": "git+https://github.com/cardware-wallet/cardware-btc.git"
   },
   "files": [
     "cardware_btc_bg.wasm",
