@@ -6,7 +6,7 @@ license = "GPL-3.0-only"
 description = "The official BTC library for interacting with a Cardware device through web."
 authors = ["Cardware Wallet (Pty) Ltd"]
 homepage = "https://cardwarewallet.com"
-repository = "https://github.com/cardware-wallet/cardware-btc"
+repository = "git+https://github.com/cardware-wallet/cardware-btc.git"
 keywords = ["bitcoin", "wallet", "cardware", "cardware-wallet"]
 readme = "README.md"
 
