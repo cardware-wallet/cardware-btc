@@ -44,10 +44,10 @@ impl Wallet{
             fee_estimates : None,
         }
     }
-    pub async fn sync(&mut self) -> String{
+    pub async fn sync(&mut self) -> String {
         return self.sync_to_depth("m/0/0".to_string()).await;
     }
-    pub async fn sync_to_depth(&mut self, max_depth : String) -> String{
+    pub async fn sync_to_depth(&mut self, max_depth : String) -> String {
         let fee_sync = match self.fetch_fee_estimates().await{
             Ok(dict) => dict,
             Err(_) => return "Error: Fee sync error.".to_string(),
@@ -122,7 +122,7 @@ impl Wallet{
         self.utxos = Some(utxos);
         return "Sync successful.".to_string();
     }
-    pub async fn broadcast(&mut self, transaction : String) -> String{
+    pub async fn broadcast(&mut self, transaction : String) -> String {
         let client = Client::new();
         let tx_hex_string = match base64_to_hex(&transaction){
             Ok(tx_hex_string) => tx_hex_string,
@@ -142,7 +142,6 @@ impl Wallet{
             .send()
             .await{
                 Ok(_) => {
-                        //Add to trusted pending
                         let mut tp = self.get_trusted_pending();
                         tp.push(txid_str.clone());
                         self.set_trusted_pending(tp);
@@ -151,20 +150,20 @@ impl Wallet{
                 Err(_) => return "Error: Failed to broadcast transaction.".to_string(),
             }
     }
-    pub async fn broadcast_multisig(&mut self, transaction_signatures : Vec<String>) -> String{
+    pub async fn broadcast_multisig(&mut self, transaction_signatures : Vec<String>) -> String {
         let client = Client::new();
         let mut tx_graph : Vec<bitcoin::Transaction> = Vec::new();
         let mut pubkeys : Vec<PublicKey> = Vec::new();
         for zpub in self.xpubs.iter().skip(1) {
-            let xpub_tmp_str = &convert_to_xpub(zpub.to_string()); //Xpub 1 
+            let xpub_tmp_str = &convert_to_xpub(zpub.to_string()); //Zpub 1 
             let xpub = match Xpub::from_str(&xpub_tmp_str){
                 Ok(xpub) => xpub,
-                Err(_) => return "Error: Xpub derivation error.".to_string(),
+                Err(_) => return "Error: Zpub derivation error.".to_string(),
             };
             let derivation_path = DerivationPath::from_str("m/0/0").unwrap();
             let derived_xpub = match xpub.derive_pub(&bitcoin::secp256k1::Secp256k1::new(), &derivation_path){
                 Ok(derived_xpub) => derived_xpub,
-                Err(_) => return "Error: Xpub derivation error.".to_string(),
+                Err(_) => return "Error: Zpub derivation error.".to_string(),
             };
             let public_key = PublicKey::new(
                 derived_xpub.public_key
@@ -231,7 +230,7 @@ impl Wallet{
                 Err(_) => return "Error: Failed to broadcast transaction.".to_string(),
             }
     }
-    pub fn send(&self, recipient_addrs : Vec<String>, amounts : Vec<u64>, fee : u64) -> Vec<String>{
+    pub fn send(&self, recipient_addrs : Vec<String>, amounts : Vec<u64>, fee : u64) -> Vec<String> {
         let dust_limit : u64 = 546;
         let network = self.get_network();
         let address_str = &self.address();
@@ -245,7 +244,7 @@ impl Wallet{
             Ok(rec) =>  {
                 match rec.require_network(network){
                     Ok(checked) => checked,
-                    Err(_) => return vec!["Error".to_string()],
+                    Err(_) => return vec!["Error: Failed to parse network.".to_string()],
                 }
             }
             Err(_) => return vec!["Error: Failed to parse network.".to_string()],
@@ -338,15 +337,15 @@ impl Wallet{
             };
             let mut pubkeys : Vec<PublicKey> = Vec::new();
             for zpub in self.xpubs.iter().skip(1) {
-                let xpub_tmp_str = &convert_to_xpub(zpub.to_string()); //Xpub 1 
+                let xpub_tmp_str = &convert_to_xpub(zpub.to_string()); //Zpub 1 
                 let xpub = match Xpub::from_str(&xpub_tmp_str){
                     Ok(xpub) => xpub,
-                    Err(_) => return vec!["Error: Xpub derivation error.".to_string()],
+                    Err(_) => return vec!["Error: Zpub derivation error.".to_string()],
                 };
                 let derivation_path = DerivationPath::from_str("m/0/0").unwrap();
                 let derived_xpub = match xpub.derive_pub(&bitcoin::secp256k1::Secp256k1::new(), &derivation_path){
                     Ok(derived_xpub) => derived_xpub,
-                    Err(_) => return vec!["Error: Xpub derivation error.".to_string()],
+                    Err(_) => return vec!["Error: Zpub derivation error.".to_string()],
                 };
                 let public_key = PublicKey::new(
                     derived_xpub.public_key
@@ -365,10 +364,10 @@ impl Wallet{
             let final_str = base64::encode(&serialized_tx) + ":"+&base64::encode(&segwit_ed)+":"+&base64::encode(&pubkey_bytes);
             return chunk_and_label(&final_str,40);
         }else{
-            return vec!["Error: Wallet requires at least one xpub.".to_string()];
+            return vec!["Error: Wallet requires at least one zpub.".to_string()];
         }
     }
-    pub fn estimate_fee(&self,recipient_addrs : Vec<String>, amounts : Vec<u64>, number_of_blocks : i32) -> u64{
+    pub fn estimate_fee(&self,recipient_addrs : Vec<String>, amounts : Vec<u64>, number_of_blocks : i32) -> u64 {
         let dust_limit : u64 = 546;
         let mut txin_vec = Vec::new();
         let mut txout_vec = Vec::new();
@@ -470,7 +469,7 @@ impl Wallet{
         let fee_64 : u64 = fee_int as u64;
         return fee_64 + dust_adjustment;
     }
-    pub fn estimate_sweep_fee(&self, number_of_blocks :i32) -> u64{
+    pub fn estimate_sweep_fee(&self, number_of_blocks :i32) -> u64 {
         let mut txin_vec = Vec::new();
         let mut txout_vec = Vec::new();
         let network = self.get_network();
@@ -528,31 +527,30 @@ impl Wallet{
         let fee_64 : u64 = fee_int as u64;
         return fee_64;   
     }
-    pub fn set_trusted_pending(&mut self, utxo_vec : Vec<String>){
+    pub fn set_trusted_pending(&mut self, utxo_vec : Vec<String>) {
         self.trusted_pending = Some(utxo_vec);
     }
-    pub fn get_trusted_pending(&self) -> Vec<String>{
+    pub fn get_trusted_pending(&self) -> Vec<String> {
         match &self.trusted_pending{
             Some(vec) => return vec.to_vec(),
             None => return Vec::new(),
         }
     }
     //Getters
-    pub fn balance(&self) -> u64{
+    pub fn balance(&self) -> u64 {
         return self.btc;
     }
-    pub fn unconfirmed_balance(&self) -> u64{
+    pub fn unconfirmed_balance(&self) -> u64 {
         return self.unconfirmed;
     }
-    pub fn address(&self)->String{
+    pub fn address(&self)-> String {
         return self.new_address("m/0/0");
     }
-    pub fn new_address(&self, derivation_path : &str)-> String{
+    pub fn new_address(&self, derivation_path : &str)-> String {
         let network = self.get_network();
-        //Insert multi-sig changes here
-        if self.xpubs.len() == 1{
+        if self.xpubs.len() == 1 {
             let xpub_str = convert_to_xpub(self.xpubs[0].clone());
-            if xpub_str == "Error: Invalid extended public key." { return xpub_str}
+            if xpub_str == "Error: Invalid extended public key." { return xpub_str }
             let xpub = match Xpub::from_str(&xpub_str){
                 Ok(xpub) => xpub,
                 Err(_) => return "Error: Invalid extended public key.".to_string(),
@@ -560,12 +558,12 @@ impl Wallet{
             let derivation_path = DerivationPath::from_str(derivation_path).unwrap();
             let derived_xpub = match xpub.derive_pub(&bitcoin::secp256k1::Secp256k1::new(), &derivation_path){
                 Ok(derived_xpub) => derived_xpub,
-                Err(_) => return "Error: Xpub derivation error.".to_string(),
+                Err(_) => return "Error: Zpub derivation error.".to_string(),
             };
             let public_key = derived_xpub.to_pub();
             let address = Address::p2wpkh(&public_key, network);
             return format!("{:?}",address);
-        }else if self.xpubs.len() > 1{
+        } else if self.xpubs.len() > 1 {
             //Multi sig
             let parts : Vec<&str> = self.xpubs[0].split('/').collect();
             if parts.len() != 2 {
@@ -581,15 +579,15 @@ impl Wallet{
             };
             let mut pubkeys : Vec<PublicKey> = Vec::new();
             for zpub in self.xpubs.iter().skip(1) {
-                let xpub_tmp_str = &convert_to_xpub(zpub.to_string()); //Xpub 1 
+                let xpub_tmp_str = &convert_to_xpub(zpub.to_string()); //Zpub 1 
                 let xpub = match Xpub::from_str(&xpub_tmp_str){
                     Ok(xpub) => xpub,
-                    Err(_) => return "Error: Xpub derivation error.".to_string(),
+                    Err(_) => return "Error: Zpub derivation error.".to_string(),
                 };
                 let derivation_path = DerivationPath::from_str("m/0/0").unwrap();
                 let derived_xpub = match xpub.derive_pub(&bitcoin::secp256k1::Secp256k1::new(), &derivation_path){
                     Ok(derived_xpub) => derived_xpub,
-                    Err(_) => return "Error: Xpub derivation error.".to_string(),
+                    Err(_) => return "Error: Zpub derivation error.".to_string(),
                 };
                 let public_key = PublicKey::new(
                     derived_xpub.public_key
@@ -608,19 +606,19 @@ impl Wallet{
 
             let multisig_address = Address::p2wsh(&witness_script, Network::Bitcoin);
             return format!("{:?}",multisig_address);
-        }else{
-            return "Error: Xpub list cannot be empty.".to_string();
+        } else {
+            return "Error: Wallet requires at least one xpub.".to_string();
         }
     }
     //Helpers
-    fn get_network(&self)->Network{
+    fn get_network(&self)-> Network {
         if self.network =="bitcoin" || self.network == "mainnet" || self.network == "Bitcoin" || self.network == "Mainnet" {
             return Network::Bitcoin;
         }else{ //Default to testnet if specification is wrong
             return Network::Testnet;
         }
     }
-    async fn fetch_fee_estimates(&self) -> Result<HashMap<String,f64>,&str>{
+    async fn fetch_fee_estimates(&self) -> Result<HashMap<String, f64>, &str> {
         let esplora_server_url = &self.esplora_url;
         let mut path = String::new();
         path.push_str(&esplora_server_url);
@@ -639,7 +637,7 @@ impl Wallet{
 }
 
 //Helper functions
-pub fn convert_psbt_to_qr(psbt_bytes: &[u8]) -> Vec<String>{
+pub fn convert_psbt_to_qr(psbt_bytes: &[u8]) -> Vec<String> {
     let mut segwit_ed : Vec<u8> = Vec::new();
     let psbt: Psbt = match Psbt::deserialize(psbt_bytes){
         Ok(psbt) => psbt,
@@ -669,7 +667,7 @@ pub fn convert_psbt_to_qr(psbt_bytes: &[u8]) -> Vec<String>{
     let final_str = base64::encode(&serialized_tx) + ":"+&base64::encode(&segwit_ed);
     return chunk_and_label(&final_str,40);
 }
-pub fn convert_to_xpub(xpub_str : String) -> String{
+pub fn convert_to_xpub(xpub_str : String) -> String {
     let zpub_bytes = match bs58::decode(&xpub_str).with_check(None).into_vec(){
         Ok(zpub_bytes) => zpub_bytes,
         Err(_) => return "Error: Invalid extended public key.".to_string(),
@@ -682,7 +680,7 @@ pub fn convert_to_xpub(xpub_str : String) -> String{
     }
     return bs58::encode(vec).with_check().into_string();
 }
-pub fn convert_to_outpoint(utxo_str : &String) -> OutPoint{
+pub fn convert_to_outpoint(utxo_str : &String) -> OutPoint {
     let parts : Vec<&str> = utxo_str.split(":").collect();
     let vout : u32 =  parts[1].parse().unwrap();
     let mut byte_arr = hex_string_to_u8_array(parts[0]).unwrap();
@@ -778,7 +776,7 @@ pub fn generate_variations(input: &str) -> Vec<String> {
 }
 
 //Structs
-#[derive(Debug, Serialize, Deserialize,Default,Clone)]
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct Utxo{
     pub utxo : String,
     pub btc : u64,
@@ -786,14 +784,14 @@ pub struct Utxo{
     pub confirmed : bool,
     pub derivation_path : String,
 }
-#[derive(Debug, Serialize, Deserialize,Default,Clone)]
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct EsploraUtxos{
     pub txid : String,
     pub vout : u64,
     pub status : EsploraStatus,
     pub value : u64,
 }
-#[derive(Debug, Serialize, Deserialize,Default,Clone)]
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct EsploraStatus{
     pub confirmed : bool,
     pub block_height : Option<u64>,

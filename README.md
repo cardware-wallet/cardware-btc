@@ -30,20 +30,20 @@ import Wallet from 'cardware-btc';
 
 ## New Wallet
 
-This function initializes a wallet object in your web wallet. The xpub is received from the Cardware device after successfully pairing the web wallet and Cardware device. The pairing process involves scanning the **pair** QR codes from the Cardware device, extracting the xpub, then using it in creating the wallet object.
+This function initializes a wallet object in your web wallet. The zpub is received from the Cardware device after successfully pairing the web wallet and Cardware device. The pairing process involves scanning the **pair** QR codes from the Cardware device, extracting the zpub, then using it in creating the wallet object.
 
 ### Parameters
 
 | Parameter | Type | Description | Example |
 |---|---|---|---|
-| xpub | string | The xpub of the the hardware wallet. | ```"vpub5ZNhc5KKM6hACK6QDuo6UG1749XUeXf9Gbu8rcZQnNDeMJwUPrwzEVKsF7X7EzZe5yqwymfMA1tGJ9qAmjdmGHSkRW7SruCEDz9mgEkwWvN"``` |
+| zpub | string | The zpub of the the hardware wallet. | ```"vpub5ZNhc5KKM6hACK6QDuo6UG1749XUeXf9Gbu8rcZQnNDeMJwUPrwzEVKsF7X7EzZe5yqwymfMA1tGJ9qAmjdmGHSkRW7SruCEDz9mgEkwWvN"``` |
 | esplora_url | string | The address of the esplora you are using. | ```"https://blockstream.info/api"``` |
 | network | string | The network you are using (mainnet or testnet). | ```"mainnet"``` |
 
 ### Code
 
 ```javascript
-var wallet = await new Wallet(xpub, esplora_url, network);
+var wallet = await new Wallet(zpub, esplora_url, network);
 ```
 
 ### Output
@@ -120,7 +120,6 @@ This function estimates fees for a send transaction which takes a variable calle
 | amounts | array[int64] | The send amounts in satoshis. | ```[1480]``` |
 | number_of_blocks | int32 | The number of blocks for fee estimation. The lower the number, the higher the fee. | ```3``` |
 
-
 ### Code
 
 ```javascript
@@ -184,7 +183,6 @@ This function creates an unsigned transaction which it converts into a base64 st
 | amounts | array[int64] | The send amounts (in satoshis). | ```[1000]``` |
 | fee | int64 | The transaction fee worked out in estimate_fee (in satoshis). | ```1480``` |
 
-
 ### Code
 
 ```javascript
@@ -205,12 +203,15 @@ The output is an array of strings.
 | error | There are no UTXOs to spend. | ```["Error: No UTXOs to spend."]```
 | error | There is an issue with the derivation path. | ```["Error: Derivation path error."]```
 | error | There is an invalid recipient address. | ```["Error: Invalid recipient address."]```
+| error | There is an issue with the multi-sig size and threshold. | ```"Error: Invalid multi-sig size and threshold, please use n/n eg. 2/3."```
+| error | There is an issue deriving the zpub. | ```"Error: Zpub derivation error."``` |
+| error | There are no zpubs to create a wallet. | ```"Error: Wallet requires at least one zpub."``` |
 
 ---
 
 ## Broadcast
 
-This function needs a signed transaction as a base64 string. It gets this by scanning the Cardware device. When scanning the QR codes of the signed transaction from the Cardware device it follows the format of *(* + *index of QR code* + */* + *total QR codes* + *)* + *part of the signed transaction as a base64 string*.
+This function needs a signed transaction as a base64 string. It gets this by scanning the QR codes on the Cardware device. When scanning the QR codes of the signed transaction from the Cardware device it follows the format of *(* + *index of QR code* + */* + *total QR codes* + *)* + *part of the signed transaction as a base64 string*.
 
 ### Parameters
 
@@ -238,6 +239,38 @@ The output is a strings.
 
 ---
 
+## Broadcast Multisig
+
+This function needs an array of signed transactions as a list of base64 strings. It gets this by scanning the QR codes on the Cardware device. When scanning the QR codes of the signed transaction from the Cardware device it follows the format of *(* + *index of QR code* + */* + *total QR codes* + *)* + *part of the signed transaction as a base64 string*. A backend server is used to temporarily store the signed transactions until there are enough that are needed for the multisig to be valid. Then it broadcasts the transaction.
+
+### Parameters
+
+| Parameter | Type | Description | Example |
+|---|---|---|---|
+| transaction_signatures | array[string] | An array of signed transactions in base64 which will be used to broadcast the multisig transaction. | ```["AgAAAAABAbIVaiUeeL10JflXCbw4727RyErZ8/+ERs9hdIrVmrpNAQAAAAD/////AegDAAAAAAAAFgAUg3fJmFw+Xphk3Et2NlpZUoP4XycDSDBFAiEAk5onGG5supY9hsaXdgNIFOoT//95KXLdsO66FIZyo1gCIFmOTSc/6AIGc5hi1d5hBD9dCeApNs2b/frRSLq4VOc/ASECcikWYSZ3j4ahirRPBY3ZAasVUf7KelhHCdevmCn5MgVHUiECGXDMUG+QxA779XjIsWRTtZfDH1A3SV/KrTvZh6e9CJUhAnIpFmEmd4+GoYq0TwWN2QGrFVH+ynpYRwnXr5gp+TIFUq4AAAAA", "AgAAAAABAbIVaiUeeL10JflXCbw4727RyErZ8/+ERs9hdIrVmrpNAQAAAAD/////AegDAAAAAAAAFgAUg3fJmFw+Xphk3Et2NlpZUoP4XycDSDBFAiEAw/GaAfnJhAEmdWl8wuCN73qXcgBrcdxMp6/+xMVCPdECIEQIrLKA8tONmhswU1FU7HSDthx/pIxj1PXvGaVq7h7EASECGXDMUG+QxA779XjIsWRTtZfDH1A3SV/KrTvZh6e9CJVHUiECGXDMUG+QxA779XjIsWRTtZfDH1A3SV/KrTvZh6e9CJUhAnIpFmEmd4+GoYq0TwWN2QGrFVH+ynpYRwnXr5gp+TIFUq4AAAAA"]``` |
+
+### Code
+
+```javascript
+await wallet.broadcast_multisig(transaction_signatures);
+```
+
+### Output
+
+The output is a strings.
+
+| Result | Description | Output |
+|---|---|---|
+| success | The transaction ID of the broadcasted transaction. | ```"340d9847c5c906f2fcd7b3f044cfac3f84c0980fa0e786e728c4834894947c42"``` |
+| error | There is an issue deriving the zpub. | ```"Error: Zpub derivation error."``` |
+| error | There is an issue parsing the base64 transaction string. | ```"Error: Failed to parse base64 transaction."```
+| error | There is an issue decoding the hex transaction.| ```"Error: Decoding failed."```
+| error | The signed transaction is invalid. | ```"Error: Invalid transaction."```
+| error | One or more of the signed transactions is invalid. | ```"Error: Invalid transaction signatures."```
+| error | There is an issue broadcasting the transaction. | ```"Error: Failed to broadcast transaction."```
+
+---
+
 ## Address
 
 This function returns the address of your Cardware device.
@@ -260,7 +293,7 @@ The output is a string.
 |---|---|---|
 | success | The address of the wallet. | ```"bc1qxkygsmwa2q8x9k4umxpem0tw4cdyzc79kn5r5p"``` |
 | error | There is an invalid extended public key. | ```"Error: Invalid extended public key."``` |
-| error | There is an issue deriving the xpub. | ```"Error: Xpub derivation error."``` |
+| error | There is an issue deriving the zpub. | ```"Error: Zpub derivation error."``` |
 
 ---
 
@@ -286,7 +319,9 @@ const result = wallet.new_address(derivation_path);
 |---|---|---|
 | success | The address of the wallet. | ```"bc1qxkygsmwa2q8x9k4umxpem0tw4cdyzc79kn5r5p"``` |
 | error | There is an invalid extended public key. | ```"Error: Invalid extended public key."``` |
-| error | There is an issue deriving the xpub. | ```"Error: Xpub derivation error."``` |
+| error | There is an issue deriving the zpub. | ```"Error: Zpub derivation error."``` |
+| error | There is an issue with the multi-sig size and threshold. | ```"Error: Invalid multi-sig size and threshold, please use n/n eg. 2/3."``` |
+| error | There are no zpubs to create a wallet. | ```"Error: Wallet requires at least one zpub."``` |
 
 ---
 
