@@ -637,6 +637,7 @@ impl Wallet{
 }
 
 //Helper functions
+#[wasm_bindgen]
 pub fn convert_psbt_to_qr(psbt_bytes: &[u8]) -> Vec<String> {
     let mut segwit_ed : Vec<u8> = Vec::new();
     let psbt: Psbt = match Psbt::deserialize(psbt_bytes){

@@ -1,6 +1,11 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
+* @param {Uint8Array} psbt_bytes
+* @returns {(string)[]}
+*/
+export function convert_psbt_to_qr(psbt_bytes: Uint8Array): (string)[];
+/**
 */
 export class Wallet {
   free(): void;

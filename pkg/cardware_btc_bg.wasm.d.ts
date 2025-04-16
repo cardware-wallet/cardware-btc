@@ -16,6 +16,7 @@ export function wallet_balance(a: number): number;
 export function wallet_unconfirmed_balance(a: number): number;
 export function wallet_address(a: number, b: number): void;
 export function wallet_new_address(a: number, b: number, c: number, d: number): void;
+export function convert_psbt_to_qr(a: number, b: number, c: number): void;
 export function rustsecp256k1_v0_10_0_context_create(a: number): number;
 export function rustsecp256k1_v0_10_0_context_destroy(a: number): void;
 export function rustsecp256k1_v0_10_0_default_illegal_callback_fn(a: number, b: number): void;
