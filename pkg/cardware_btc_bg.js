@@ -295,6 +295,20 @@ export function convert_psbt_to_qr(psbt_bytes) {
     }
 }
 
+/**
+* @param {string} transaction
+* @param {string} esplora_url
+* @returns {Promise<string>}
+*/
+export function raw_broadcast(transaction, esplora_url) {
+    const ptr0 = passStringToWasm0(transaction, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(esplora_url, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.raw_broadcast(ptr0, len0, ptr1, len1);
+    return takeObject(ret);
+}
+
 function handleError(f, args) {
     try {
         return f.apply(this, args);
@@ -302,7 +316,7 @@ function handleError(f, args) {
         wasm.__wbindgen_exn_store(addHeapObject(e));
     }
 }
-function __wbg_adapter_88(arg0, arg1, arg2, arg3) {
+function __wbg_adapter_89(arg0, arg1, arg2, arg3) {
     wasm.wasm_bindgen__convert__closures__invoke2_mut__h3ff2fd3c61bec752(arg0, arg1, addHeapObject(arg2), addHeapObject(arg3));
 }
 
@@ -710,7 +724,7 @@ export function __wbg_new_81740750da40724f(arg0, arg1) {
             const a = state0.a;
             state0.a = 0;
             try {
-                return __wbg_adapter_88(a, state0.b, arg0, arg1);
+                return __wbg_adapter_89(a, state0.b, arg0, arg1);
             } finally {
                 state0.a = a;
             }
@@ -784,8 +798,8 @@ export function __wbindgen_memory() {
     return addHeapObject(ret);
 };
 
-export function __wbindgen_closure_wrapper677(arg0, arg1, arg2) {
-    const ret = makeMutClosure(arg0, arg1, 195, __wbg_adapter_24);
+export function __wbindgen_closure_wrapper684(arg0, arg1, arg2) {
+    const ret = makeMutClosure(arg0, arg1, 199, __wbg_adapter_24);
     return addHeapObject(ret);
 };
 

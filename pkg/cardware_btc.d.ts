@@ -6,6 +6,12 @@
 */
 export function convert_psbt_to_qr(psbt_bytes: Uint8Array): (string)[];
 /**
+* @param {string} transaction
+* @param {string} esplora_url
+* @returns {Promise<string>}
+*/
+export function raw_broadcast(transaction: string, esplora_url: string): Promise<string>;
+/**
 */
 export class Wallet {
   free(): void;

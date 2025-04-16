@@ -668,6 +668,30 @@ pub fn convert_psbt_to_qr(psbt_bytes: &[u8]) -> Vec<String> {
     let final_str = base64::encode(&serialized_tx) + ":"+&base64::encode(&segwit_ed);
     return chunk_and_label(&final_str,40);
 }
+#[wasm_bindgen]
+pub async fn raw_broadcast(transaction : String, esplora_url : String) -> String {
+    let client = Client::new();
+    let tx_hex_string = match base64_to_hex(&transaction){
+        Ok(tx_hex_string) => tx_hex_string,
+        Err(_) => return "Error: Failed to parse base64 transaction.".to_string(),
+    };
+    let tx_bytes = match hex::decode(tx_hex_string.clone()){
+        Ok(tx_bytes) => tx_bytes,
+        Err(_) => return "Error: Decoding failed.".to_string(),
+    };
+    let txid_str = match deserialize::<bitcoin::Transaction>(&tx_bytes){
+        Ok(tx) =>tx.compute_txid().to_string(),
+        Err(_) => return "Error: Invalid transaction.".to_string(),
+    };
+    match client
+        .post(format!("{}/tx",esplora_url)) //.header(header::CONTENT_TYPE, "application/json")
+        .body(tx_hex_string)
+        .send()
+        .await{
+            Ok(_) => return txid_str,
+            Err(_) => return "Error: Failed to broadcast transaction.".to_string(),
+        }
+}
 pub fn convert_to_xpub(xpub_str : String) -> String {
     let zpub_bytes = match bs58::decode(&xpub_str).with_check(None).into_vec(){
         Ok(zpub_bytes) => zpub_bytes,
