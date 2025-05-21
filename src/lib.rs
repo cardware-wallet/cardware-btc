@@ -712,19 +712,7 @@ impl Wallet {
         let wallet_addresses = self.get_wallet_addresses();
         let tx_summaries = raw_txs.into_iter()
             .map(|tx| {
-                // Calculate sent/received
-                let sent = tx.vin.iter()
-                    .filter_map(|input| input.prevout.as_ref())
-                    .filter(|prevout| wallet_addresses.contains(&prevout.scriptpubkey_address))
-                    .map(|prevout| prevout.value)
-                    .sum();
-                
-                let received = tx.vout.iter()
-                    .filter(|output| wallet_addresses.contains(&output.scriptpubkey_address))
-                    .map(|output| output.value)
-                    .sum();
-                
-                // Calculate fee
+                // Calculate total inputs and outputs values
                 let input_total: u64 = tx.vin.iter()
                     .filter_map(|input| input.prevout.as_ref())
                     .map(|prevout| prevout.value)
@@ -734,7 +722,27 @@ impl Wallet {
                     .map(|output| output.value)
                     .sum();
                 
+                // Calculate fee: difference between inputs and outputs
                 let fee = if input_total > output_total { input_total - output_total } else { 0 };
+                
+                // Calculate amount sent: sum of inputs from wallet addresses
+                let sent: u64 = tx.vin.iter()
+                    .filter_map(|input| input.prevout.as_ref())
+                    .filter(|prevout| wallet_addresses.contains(&prevout.scriptpubkey_address))
+                    .map(|prevout| prevout.value)
+                    .sum();
+                
+                // Calculate amount received: sum of outputs to wallet addresses
+                let received: u64 = tx.vout.iter()
+                    .filter(|output| wallet_addresses.contains(&output.scriptpubkey_address))
+                    .map(|output| output.value)
+                    .sum();
+                
+                // Extract external recipients (outputs to non-wallet addresses)
+                let external_recipients: Vec<(String, u64)> = tx.vout.iter()
+                    .filter(|output| !wallet_addresses.contains(&output.scriptpubkey_address))
+                    .map(|output| (output.scriptpubkey_address.clone(), output.value))
+                    .collect();
                 
                 TxSummary {
                     txid: tx.txid,
@@ -744,6 +752,7 @@ impl Wallet {
                     sent,
                     received,
                     fee,
+                    external_recipients,
                 }
             })
             .collect();
@@ -993,4 +1002,5 @@ pub struct TxSummary {
     pub sent: u64,
     pub received: u64,
     pub fee: u64,
+    pub external_recipients: Vec<(String, u64)>,
 }

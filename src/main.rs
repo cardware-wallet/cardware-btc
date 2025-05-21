@@ -8,6 +8,10 @@ fn format_timestamp(timestamp: u64) -> String {
     datetime.format("%Y-%m-%d %H:%M:%S UTC").to_string()
 }
 
+fn format_btc(satoshis: u64) -> String {
+    format!("{} satoshis ({:.8} BTC)", satoshis, satoshis as f64 / 100_000_000.0)
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let zpub = "zpub6qWnLWskXjBhPC3xaBd1ZBQUP1qmjuoH2H67jfZqetTKU5LjcJkicLdoa1iDSfgrd2Bw2a1gdCirKvUQ6kxffe8yNNENPCoDS68MqfBcXyb";
@@ -20,7 +24,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Syncing wallet...");
     let sync_result = wallet.sync().await;
     println!("Sync result: {}", sync_result);
-    println!("Wallet balance: {} satoshis", wallet.balance());
+    println!("Wallet balance: {}", format_btc(wallet.balance()));
     
     // Fetch transaction history with simpler implementation
     println!("\nFetching transaction history...");
@@ -40,18 +44,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("Time: {}", format_timestamp(timestamp));
                 }
                 
-                println!("Sent: {} satoshis", tx.sent);
-                println!("Received: {} satoshis", tx.received);
-                println!("Fee: {} satoshis", tx.fee);
+                println!("Sent: {}", format_btc(tx.sent));
+                println!("Received: {}", format_btc(tx.received));
+                println!("Fee: {}", format_btc(tx.fee));
+                
+                // Show external recipients
+                if !tx.external_recipients.is_empty() {
+                    println!("External Recipients:");
+                    for (address, amount) in &tx.external_recipients {
+                        println!("  → {} to {}", format_btc(*amount), address);
+                    }
+                }
                 
                 // Calculate net effect
                 if tx.sent > 0 && tx.received > 0 {
                     let net = (tx.received as i64) - (tx.sent as i64);
-                    println!("Net change: {} satoshis", net);
+                    if net >= 0 {
+                        println!("Net change: +{}", format_btc(net as u64));
+                    } else {
+                        println!("Net change: -{}", format_btc((-net) as u64));
+                    }
                 } else if tx.sent > 0 {
-                    println!("Net change: -{} satoshis", tx.sent + tx.fee);
+                    println!("Net change: -{}", format_btc(tx.sent));
                 } else if tx.received > 0 {
-                    println!("Net change: +{} satoshis", tx.received);
+                    println!("Net change: +{}", format_btc(tx.received));
                 }
             }
         },
