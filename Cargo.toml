@@ -26,5 +26,6 @@ libc = "0.2"
 base64 = "0.13"
 bs58 = {version="0.4",features=["check"]}
 tokio = { version = "1", features = ["full"] }
+chrono = "0.4"
 
 #This dependancy is just for testing and isn't need for build outs and stops wasm-pack build

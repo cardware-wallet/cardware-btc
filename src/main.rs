@@ -1,4 +1,12 @@
 use cardware_btc::Wallet;
+use std::time::{Duration, UNIX_EPOCH};
+use chrono::{DateTime, Utc};
+
+fn format_timestamp(timestamp: u64) -> String {
+    let d = UNIX_EPOCH + Duration::from_secs(timestamp);
+    let datetime = DateTime::<Utc>::from(d);
+    datetime.format("%Y-%m-%d %H:%M:%S UTC").to_string()
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -28,6 +36,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("\nTransaction: {}", tx.txid);
                 println!("Block Height: {:?}", tx.status.block_height);
                 println!("Confirmed: {}", tx.status.confirmed);
+                
+                // Display timestamp if available
+                if let Some(timestamp) = tx.status.timestamp {
+                    println!("Timestamp: {} ({})", timestamp, format_timestamp(timestamp));
+                }
                 
                 // Calculate transaction values
                 let total_in = tx.total_input_value();

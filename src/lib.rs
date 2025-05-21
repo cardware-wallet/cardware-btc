@@ -812,8 +812,60 @@ impl Wallet {
         all_txs.sort_by(|a, b| b.status.block_height.unwrap_or(0).cmp(&a.status.block_height.unwrap_or(0)));
         all_txs.dedup_by(|a, b| a.txid == b.txid);
         
+        // After fetching transactions, fetch block details for confirmed transactions
+        let mut block_timestamps: HashMap<String, u64> = HashMap::new();
+        
+        // Only fetch timestamps for confirmed transactions with block_hash
+        for tx in &all_txs {
+            if tx.status.confirmed && tx.status.block_hash.is_some() {
+                let block_hash = tx.status.block_hash.as_ref().unwrap();
+                
+                // Only fetch if we haven't already fetched this block's timestamp
+                if !block_timestamps.contains_key(block_hash) {
+                    match self.fetch_block_timestamp(block_hash).await {
+                        Ok(timestamp) => {
+                            block_timestamps.insert(block_hash.clone(), timestamp);
+                        },
+                        Err(e) => {
+                            eprintln!("Error fetching timestamp for block {}: {}", block_hash, e);
+                            // Continue with other transactions, don't fail the whole operation
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Add this block_timestamps map to the response so it can be used
+        for tx in &mut all_txs {
+            if tx.status.confirmed && tx.status.block_hash.is_some() {
+                let block_hash = tx.status.block_hash.as_ref().unwrap();
+                if let Some(timestamp) = block_timestamps.get(block_hash) {
+                    tx.status.timestamp = Some(*timestamp);
+                }
+            }
+        }
+        
+        // Sort and deduplicate transactions by txid
+        all_txs.sort_by(|a, b| b.status.block_height.unwrap_or(0).cmp(&a.status.block_height.unwrap_or(0)));
+        all_txs.dedup_by(|a, b| a.txid == b.txid);
+        
         // Return the transactions
         Ok(all_txs)
+    }
+
+    // Fetch block timestamp from Esplora API
+    async fn fetch_block_timestamp(&self, block_hash: &str) -> Result<u64, Box<dyn std::error::Error>> {
+        let client = Client::new();
+        let url = format!("{}/block/{}", self.esplora_url, block_hash);
+        
+        let response = client.get(&url).send().await?;
+        
+        if !response.status().is_success() {
+            return Err(format!("Error fetching block data: {}", response.status()).into());
+        }
+        
+        let block_data: EsploraBlock = response.json().await?;
+        Ok(block_data.timestamp)
     }
 }
 
@@ -1002,6 +1054,7 @@ pub struct EsploraStatus{
     pub confirmed : bool,
     pub block_height : Option<u64>,
     pub block_hash : Option<String>,
+    pub timestamp: Option<u64>, // Add this field
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -1128,6 +1181,7 @@ impl EsploraTransaction {
             confirmed: self.status.confirmed,
             inputs_count: self.vin.len(),
             outputs_count: self.vout.len(),
+            timestamp: self.status.timestamp, // Add timestamp to summary
         }
     }
 }
@@ -1147,4 +1201,13 @@ pub struct EsploraTransactionSummary {
     pub confirmed: bool,
     pub inputs_count: usize,
     pub outputs_count: usize,
+    pub timestamp: Option<u64>, // Unix timestamp in seconds
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct EsploraBlock {
+    pub id: String,
+    pub height: u64,
+    pub timestamp: u64,
+    pub tx_count: u64,
 }
