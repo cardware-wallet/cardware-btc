@@ -635,6 +635,21 @@ impl Wallet{
         return Ok(dict);
     }
     pub async fn get_tx_history(&self) -> Result<JsValue, JsValue> {
+        match self.get_tx_history_internal().await {
+            Ok(txs) => {
+                match serde_json::to_string(&txs) {
+                    Ok(json_str) => Ok(JsValue::from_str(&json_str)),
+                    Err(e) => Err(JsValue::from_str(&format!("Error serializing transactions: {}", e))),
+                }
+            },
+            Err(e) => Err(JsValue::from_str(&e.to_string())),
+        }
+    }
+}
+
+// Non-WASM implementation for native testing
+impl Wallet {
+    pub async fn get_tx_history_internal(&self) -> Result<Vec<EsploraTransaction>, Box<dyn std::error::Error>> {
         let client = Client::new();
         
         // Process each xpub (in case of multisig)
@@ -645,13 +660,8 @@ impl Wallet{
         let zpub = &self.xpubs[0];
         let xpub_str = convert_to_xpub(zpub.to_string());
         if xpub_str.starts_with("Error") {
-            return Err(JsValue::from_str(&xpub_str));
+            return Err(xpub_str.into());
         }
-        
-        let xpub = match Xpub::from_str(&xpub_str) {
-            Ok(xpub) => xpub,
-            Err(e) => return Err(JsValue::from_str(&format!("Error: {}", e))),
-        };
         
         // We'll use the same address generation logic as in sync_to_depth
         // But we'll reuse the addresses that the wallet has already synced
@@ -701,24 +711,21 @@ impl Wallet{
                     None => format!("{}/address/{}/txs", self.esplora_url, address_str),
                 };
                 
-                let response = match client.get(&url).send().await {
-                    Ok(resp) => resp,
-                    Err(e) => return Err(JsValue::from_str(&format!("Error: {}", e))),
-                };
+                let response = client.get(&url).send().await?;
                 
                 if !response.status().is_success() {
                     println!("Error fetching txs for {}: {:?}", address_str, response.status());
                     break;
                 }
                 
-                let txs_text = match response.text().await {
-                    Ok(text) => text,
-                    Err(e) => return Err(JsValue::from_str(&format!("Error: {}", e))),
-                };
+                let txs_text = response.text().await?;
                 
                 let txs_for_address: Vec<EsploraTransaction> = match serde_json::from_str(&txs_text) {
                     Ok(txs) => txs,
-                    Err(e) => return Err(JsValue::from_str(&format!("Error parsing transactions: {}", e))),
+                    Err(e) => {
+                        println!("Error parsing JSON: {}", e);
+                        break;
+                    }
                 };
                 
                 if txs_for_address.is_empty() {
@@ -774,11 +781,7 @@ impl Wallet{
             );
         }
         
-        // Convert to JsValue to return to JavaScript
-        match serde_json::to_string(&all_txs) {
-            Ok(json_str) => Ok(JsValue::from_str(&json_str)),
-            Err(e) => Err(JsValue::from_str(&format!("Error serializing transactions: {}", e))),
-        }
+        Ok(all_txs)
     }
 }
 

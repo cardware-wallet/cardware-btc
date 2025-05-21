@@ -20,9 +20,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     // Fetch transaction history
     println!("\nFetching transaction history...");
-    match wallet.get_tx_history().await {
-        Ok(tx_history) => {
-            println!("Transaction history: {}", tx_history.as_string().unwrap_or_default());
+    match wallet.get_tx_history_internal().await {
+        Ok(txs) => {
+            println!("Found {} transactions:", txs.len());
+            for tx in txs {
+                println!("\nTransaction: {}", tx.txid);
+                println!("Block Height: {:?}", tx.status.block_height);
+                println!("Confirmed: {}", tx.status.confirmed);
+                println!("Inputs: {}", tx.vin.len());
+                println!("Outputs: {}", tx.vout.len());
+            }
         },
         Err(e) => println!("Error fetching transaction history: {:?}", e),
     }
