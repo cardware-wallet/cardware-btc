@@ -637,14 +637,7 @@ impl Wallet{
     pub async fn get_tx_history(&self) -> Result<JsValue, JsValue> {
         match self.get_tx_history_internal().await {
             Ok(txs) => {
-                let wallet_addresses = self.get_wallet_addresses();
-                
-                // Convert transactions to summaries with detailed analysis
-                let tx_summaries: Vec<EsploraTransactionSummary> = txs.iter()
-                    .map(|tx| tx.to_summary(&wallet_addresses))
-                    .collect();
-                
-                match serde_json::to_string(&tx_summaries) {
+                match serde_json::to_string(&txs) {
                     Ok(json_str) => Ok(JsValue::from_str(&json_str)),
                     Err(e) => Err(JsValue::from_str(&format!("Error serializing transactions: {}", e))),
                 }
@@ -654,7 +647,7 @@ impl Wallet{
     }
     
     // Get wallet's addresses for transaction analysis
-    pub fn get_wallet_addresses(&self) -> Vec<String> {
+    fn get_wallet_addresses(&self) -> Vec<String> {
         let mut addresses = Vec::new();
         // Check receive addresses (m/0/*)
         for i in 0..5 {
@@ -676,196 +669,86 @@ impl Wallet{
 
 // Non-WASM implementation for native testing
 impl Wallet {
-    // Helper function to fetch transactions for an address with pagination
-    async fn fetch_address_transactions(&self, address_str: &str) -> Result<Vec<EsploraTransaction>, Box<dyn std::error::Error>> {
-        let client = Client::new();
-        let mut all_address_txs = Vec::new();
-        let mut last_txid = None;
-        
-        loop {
-            let url = match last_txid {
-                Some(txid) => format!(
-                    "{}/address/{}/txs/chain/{}",
-                    self.esplora_url, address_str, txid
-                ),
-                None => format!("{}/address/{}/txs", self.esplora_url, address_str),
-            };
-            
-            let response = client.get(&url).send().await?;
-            
-            if !response.status().is_success() {
-                return Err(format!("Error fetching txs for {}: {}", address_str, response.status()).into());
-            }
-            
-            let txs_for_address: Vec<EsploraTransaction> = match response.text().await {
-                Ok(text) => match serde_json::from_str(&text) {
-                    Ok(txs) => txs,
-                    Err(e) => return Err(format!("Error parsing transaction JSON: {}", e).into()),
-                },
-                Err(e) => return Err(format!("Error reading response: {}", e).into()),
-            };
-            
-            if txs_for_address.is_empty() {
-                break;
-            }
-            
-            // Get the last txid for pagination
-            last_txid = txs_for_address.last().map(|tx| tx.txid.clone());
-            
-            // Add to our collection
-            all_address_txs.extend(txs_for_address);
-        }
-        
-        Ok(all_address_txs)
-    }
-    
-    // Helper function to update balances based on transaction data
-    fn update_address_balance(
-        tx: &EsploraTransaction,
-        address_str: &str,
-        balance: &mut AddressBalance
-    ) {
-        // Count outputs sent to this address (funds received)
-        let received: u64 = tx.vout.iter()
-            .filter(|output| output.scriptpubkey_address == address_str)
-            .map(|output| output.value)
-            .sum();
-        
-        // Count inputs from this address (funds spent)
-        let spent: u64 = tx.vin.iter()
-            .filter_map(|input| input.prevout.as_ref())
-            .filter(|prevout| prevout.scriptpubkey_address == address_str)
-            .map(|prevout| prevout.value)
-            .sum();
-        
-        // Update balance with checked arithmetic
-        if received > 0 {
-            balance.received = balance.received.checked_add(received).unwrap_or(balance.received);
-            balance.balance = balance.balance.checked_add(received).unwrap_or(balance.balance);
-        }
-        
-        if spent > 0 {
-            balance.spent = balance.spent.checked_add(spent).unwrap_or(balance.spent);
-            balance.balance = balance.balance.checked_sub(spent).unwrap_or(balance.balance);
-        }
-    }
-    
-    // Helper to get derivation paths using functional style
-    fn get_derivation_paths(&self) -> Vec<String> {
-        self.utxos.as_ref()
-            .map(|utxos| {
-                utxos.iter()
-                    .map(|utxo| utxo.derivation_path.clone())
-                    .collect::<std::collections::HashSet<_>>()
-                    .into_iter()
-                    .collect()
-            })
-            .unwrap_or_else(|| vec!["m/0/0".to_string()])
-    }
-    
-    pub async fn get_tx_history_internal(&self) -> Result<Vec<EsploraTransaction>, Box<dyn std::error::Error>> {
+    // Simplified transaction history implementation - internal method
+    pub async fn get_tx_history_internal(&self) -> Result<Vec<TxSummary>, Box<dyn std::error::Error>> {
         let mut all_txs = Vec::new();
-        let mut address_balances = HashMap::new();
-        
-        // Get derivation paths from wallet's UTXOs
-        let derivations = self.get_derivation_paths();
+        let wallet_addresses = self.get_wallet_addresses();
         
         // Process each address
-        for derivation in derivations {
-            // Get the address for this derivation path
-            let address_str = self.new_address(&derivation);
-            if address_str.starts_with("Error") {
-                continue; // Skip invalid addresses
-            }
-            
-            // Initialize address balance tracking
-            address_balances.insert(
-                address_str.clone(),
-                AddressBalance {
-                    address: address_str.clone(),
-                    received: 0,
-                    spent: 0,
-                    balance: 0,
-                },
-            );
-            
-            // Fetch and process transactions for this address
-            match self.fetch_address_transactions(&address_str).await {
+        for address in &wallet_addresses {
+            // Fetch transactions for this address
+            match self.fetch_address_transactions(address).await {
                 Ok(txs_for_address) => {
-                    // Process each transaction
-                    for tx in &txs_for_address {
-                        // Update balance tracking
-                        if let Some(balance) = address_balances.get_mut(&address_str) {
-                            Self::update_address_balance(tx, &address_str, balance);
-                        }
-                        all_txs.push(tx.clone());
-                    }
+                    all_txs.extend(txs_for_address);
                 },
                 Err(e) => {
-                    // Just log the error but continue with other addresses
-                    eprintln!("Error fetching transactions for {}: {}", address_str, e);
+                    eprintln!("Error fetching transactions for {}: {}", address, e);
                 }
             }
         }
         
         // Sort by block height (newest first) and deduplicate by txid
-        all_txs.sort_by(|a, b| b.status.block_height.unwrap_or(0).cmp(&a.status.block_height.unwrap_or(0)));
+        all_txs.sort_by(|a, b| b.block_height.unwrap_or(0).cmp(&a.block_height.unwrap_or(0)));
         all_txs.dedup_by(|a, b| a.txid == b.txid);
         
-        // After fetching transactions, fetch block details for confirmed transactions
-        let mut block_timestamps: HashMap<String, u64> = HashMap::new();
-        
-        // Only fetch timestamps for confirmed transactions with block_hash
-        for tx in &all_txs {
-            if tx.status.confirmed && tx.status.block_hash.is_some() {
-                let block_hash = tx.status.block_hash.as_ref().unwrap();
-                
-                // Only fetch if we haven't already fetched this block's timestamp
-                if !block_timestamps.contains_key(block_hash) {
-                    match self.fetch_block_timestamp(block_hash).await {
-                        Ok(timestamp) => {
-                            block_timestamps.insert(block_hash.clone(), timestamp);
-                        },
-                        Err(e) => {
-                            eprintln!("Error fetching timestamp for block {}: {}", block_hash, e);
-                            // Continue with other transactions, don't fail the whole operation
-                        }
-                    }
-                }
-            }
-        }
-        
-        // Add this block_timestamps map to the response so it can be used
-        for tx in &mut all_txs {
-            if tx.status.confirmed && tx.status.block_hash.is_some() {
-                let block_hash = tx.status.block_hash.as_ref().unwrap();
-                if let Some(timestamp) = block_timestamps.get(block_hash) {
-                    tx.status.timestamp = Some(*timestamp);
-                }
-            }
-        }
-        
-        // Sort and deduplicate transactions by txid
-        all_txs.sort_by(|a, b| b.status.block_height.unwrap_or(0).cmp(&a.status.block_height.unwrap_or(0)));
-        all_txs.dedup_by(|a, b| a.txid == b.txid);
-        
-        // Return the transactions
+        // Return the simplified transactions
         Ok(all_txs)
     }
 
-    // Fetch block timestamp from Esplora API
-    async fn fetch_block_timestamp(&self, block_hash: &str) -> Result<u64, Box<dyn std::error::Error>> {
+    // Simplified fetch transactions for an address
+    async fn fetch_address_transactions(&self, address_str: &str) -> Result<Vec<TxSummary>, Box<dyn std::error::Error>> {
         let client = Client::new();
-        let url = format!("{}/block/{}", self.esplora_url, block_hash);
+        let url = format!("{}/address/{}/txs", self.esplora_url, address_str);
         
         let response = client.get(&url).send().await?;
         
         if !response.status().is_success() {
-            return Err(format!("Error fetching block data: {}", response.status()).into());
+            return Err(format!("Error fetching txs for {}: {}", address_str, response.status()).into());
         }
         
-        let block_data: EsploraBlock = response.json().await?;
-        Ok(block_data.timestamp)
+        let raw_txs: Vec<EsploraTransaction> = response.json().await?;
+        
+        // Convert raw transactions to simplified summaries
+        let wallet_addresses = self.get_wallet_addresses();
+        let tx_summaries = raw_txs.into_iter()
+            .map(|tx| {
+                // Calculate sent/received
+                let sent = tx.vin.iter()
+                    .filter_map(|input| input.prevout.as_ref())
+                    .filter(|prevout| wallet_addresses.contains(&prevout.scriptpubkey_address))
+                    .map(|prevout| prevout.value)
+                    .sum();
+                
+                let received = tx.vout.iter()
+                    .filter(|output| wallet_addresses.contains(&output.scriptpubkey_address))
+                    .map(|output| output.value)
+                    .sum();
+                
+                // Calculate fee
+                let input_total: u64 = tx.vin.iter()
+                    .filter_map(|input| input.prevout.as_ref())
+                    .map(|prevout| prevout.value)
+                    .sum();
+                
+                let output_total: u64 = tx.vout.iter()
+                    .map(|output| output.value)
+                    .sum();
+                
+                let fee = if input_total > output_total { input_total - output_total } else { 0 };
+                
+                TxSummary {
+                    txid: tx.txid,
+                    confirmed: tx.status.confirmed,
+                    block_height: tx.status.block_height,
+                    timestamp: tx.status.timestamp,
+                    sent,
+                    received,
+                    fee,
+                }
+            })
+            .collect();
+        
+        Ok(tx_summaries)
     }
 }
 
@@ -1100,114 +983,14 @@ pub struct AddressBalance {
     pub balance: u64,
 }
 
-// Add transaction analysis methods
-impl EsploraTransaction {
-    // Calculate the total value of all inputs
-    pub fn total_input_value(&self) -> u64 {
-        self.vin.iter()
-            .filter_map(|input| input.prevout.as_ref())
-            .map(|prevout| prevout.value)
-            .sum()
-    }
-    
-    // Calculate the total value of all outputs
-    pub fn total_output_value(&self) -> u64 {
-        self.vout.iter()
-            .map(|output| output.value)
-            .sum()
-    }
-    
-    // Calculate transaction fee
-    pub fn fee(&self) -> u64 {
-        let input_value = self.total_input_value();
-        let output_value = self.total_output_value();
-        
-        if input_value > output_value {
-            input_value - output_value
-        } else {
-            0
-        }
-    }
-    
-    // Calculate how much was sent from the wallet
-    pub fn value_sent_from_wallet(&self, wallet_addresses: &[String]) -> u64 {
-        self.vin.iter()
-            .filter_map(|input| input.prevout.as_ref())
-            .filter(|prevout| wallet_addresses.contains(&prevout.scriptpubkey_address))
-            .map(|prevout| prevout.value)
-            .sum()
-    }
-    
-    // Calculate how much was received by the wallet
-    pub fn value_received_by_wallet(&self, wallet_addresses: &[String]) -> u64 {
-        self.vout.iter()
-            .filter(|output| wallet_addresses.contains(&output.scriptpubkey_address))
-            .map(|output| output.value)
-            .sum()
-    }
-    
-    // Identify external recipients (non-wallet addresses)
-    pub fn external_outputs(&self, wallet_addresses: &[String]) -> Vec<(String, u64)> {
-        self.vout.iter()
-            .filter(|output| !wallet_addresses.contains(&output.scriptpubkey_address))
-            .map(|output| (output.scriptpubkey_address.clone(), output.value))
-            .collect()
-    }
-    
-    // Convert to transaction summary
-    pub fn to_summary(&self, wallet_addresses: &[String]) -> EsploraTransactionSummary {
-        let sent = self.value_sent_from_wallet(wallet_addresses);
-        let received = self.value_received_by_wallet(wallet_addresses);
-        let fee = self.fee();
-        
-        // Calculate net effect on wallet
-        let net_value = if sent > 0 {
-            (received as i64) - (sent as i64)
-        } else {
-            received as i64
-        };
-        
-        EsploraTransactionSummary {
-            txid: self.txid.clone(),
-            status: self.status.clone(),
-            value_in: self.total_input_value(),
-            value_out: self.total_output_value(),
-            fee,
-            sent,
-            received,
-            net_value,
-            external_outputs: self.external_outputs(wallet_addresses),
-            block_height: self.status.block_height,
-            confirmed: self.status.confirmed,
-            inputs_count: self.vin.len(),
-            outputs_count: self.vout.len(),
-            timestamp: self.status.timestamp, // Add timestamp to summary
-        }
-    }
-}
-
+// Simple transaction summary with essential fields only
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct EsploraTransactionSummary {
+pub struct TxSummary {
     pub txid: String,
-    pub status: EsploraStatus,
-    pub value_in: u64,
-    pub value_out: u64,
-    pub fee: u64,
+    pub confirmed: bool,
+    pub block_height: Option<u64>,
+    pub timestamp: Option<u64>,
     pub sent: u64,
     pub received: u64,
-    pub net_value: i64,
-    pub external_outputs: Vec<(String, u64)>,
-    pub block_height: Option<u64>,
-    pub confirmed: bool,
-    pub inputs_count: usize,
-    pub outputs_count: usize,
-    pub timestamp: Option<u64>, // Unix timestamp in seconds
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct EsploraBlock {
-    pub id: String,
-    pub height: u64,
-    pub timestamp: u64,
-    pub tx_count: u64,
+    pub fee: u64,
 }
