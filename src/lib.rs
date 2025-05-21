@@ -649,45 +649,107 @@ impl Wallet{
 
 // Non-WASM implementation for native testing
 impl Wallet {
-    pub async fn get_tx_history_internal(&self) -> Result<Vec<EsploraTransaction>, Box<dyn std::error::Error>> {
+    // Helper function to fetch transactions for an address with pagination
+    async fn fetch_address_transactions(&self, address_str: &str) -> Result<Vec<EsploraTransaction>, Box<dyn std::error::Error>> {
         let client = Client::new();
+        let mut all_address_txs = Vec::new();
+        let mut last_txid = None;
         
-        // Process each xpub (in case of multisig)
-        let mut all_txs: Vec<EsploraTransaction> = Vec::new();
-        let mut address_balances: HashMap<String, AddressBalance> = HashMap::new();
-        
-        // For now, just process the first xpub (can expand to handle multisig later)
-        let zpub = &self.xpubs[0];
-        let xpub_str = convert_to_xpub(zpub.to_string());
-        if xpub_str.starts_with("Error") {
-            return Err(xpub_str.into());
+        loop {
+            let url = match last_txid {
+                Some(txid) => format!(
+                    "{}/address/{}/txs/chain/{}",
+                    self.esplora_url, address_str, txid
+                ),
+                None => format!("{}/address/{}/txs", self.esplora_url, address_str),
+            };
+            
+            let response = client.get(&url).send().await?;
+            
+            if !response.status().is_success() {
+                return Err(format!("Error fetching txs for {}: {}", address_str, response.status()).into());
+            }
+            
+            let txs_for_address: Vec<EsploraTransaction> = match response.text().await {
+                Ok(text) => match serde_json::from_str(&text) {
+                    Ok(txs) => txs,
+                    Err(e) => return Err(format!("Error parsing transaction JSON: {}", e).into()),
+                },
+                Err(e) => return Err(format!("Error reading response: {}", e).into()),
+            };
+            
+            if txs_for_address.is_empty() {
+                break;
+            }
+            
+            // Get the last txid for pagination
+            last_txid = txs_for_address.last().map(|tx| tx.txid.clone());
+            
+            // Add to our collection
+            all_address_txs.extend(txs_for_address);
         }
         
-        // We'll use the same address generation logic as in sync_to_depth
-        // But we'll reuse the addresses that the wallet has already synced
-        let derivations = match &self.utxos {
-            Some(utxos) => {
-                // Get unique derivation paths from UTXOs
-                let mut paths = std::collections::HashSet::new();
-                for utxo in utxos {
-                    paths.insert(utxo.derivation_path.clone());
-                }
-                paths.into_iter().collect()
-            },
-            None => {
-                // If no UTXOs are synced yet, use m/0/0 as default
-                vec!["m/0/0".to_string()]
-            }
-        };
+        Ok(all_address_txs)
+    }
+    
+    // Helper function to update balances based on transaction data
+    fn update_address_balance(
+        tx: &EsploraTransaction,
+        address_str: &str,
+        balance: &mut AddressBalance
+    ) {
+        // Count outputs sent to this address (funds received)
+        let received: u64 = tx.vout.iter()
+            .filter(|output| output.scriptpubkey_address == address_str)
+            .map(|output| output.value)
+            .sum();
         
+        // Count inputs from this address (funds spent)
+        let spent: u64 = tx.vin.iter()
+            .filter_map(|input| input.prevout.as_ref())
+            .filter(|prevout| prevout.scriptpubkey_address == address_str)
+            .map(|prevout| prevout.value)
+            .sum();
+        
+        // Update balance with checked arithmetic
+        if received > 0 {
+            balance.received = balance.received.checked_add(received).unwrap_or(balance.received);
+            balance.balance = balance.balance.checked_add(received).unwrap_or(balance.balance);
+        }
+        
+        if spent > 0 {
+            balance.spent = balance.spent.checked_add(spent).unwrap_or(balance.spent);
+            balance.balance = balance.balance.checked_sub(spent).unwrap_or(balance.balance);
+        }
+    }
+    
+    // Helper to get derivation paths using functional style
+    fn get_derivation_paths(&self) -> Vec<String> {
+        self.utxos.as_ref()
+            .map(|utxos| {
+                utxos.iter()
+                    .map(|utxo| utxo.derivation_path.clone())
+                    .collect::<std::collections::HashSet<_>>()
+                    .into_iter()
+                    .collect()
+            })
+            .unwrap_or_else(|| vec!["m/0/0".to_string()])
+    }
+    
+    pub async fn get_tx_history_internal(&self) -> Result<Vec<EsploraTransaction>, Box<dyn std::error::Error>> {
+        let mut all_txs = Vec::new();
+        let mut address_balances = HashMap::new();
+        
+        // Get derivation paths from wallet's UTXOs
+        let derivations = self.get_derivation_paths();
+        
+        // Process each address
         for derivation in derivations {
             // Get the address for this derivation path
             let address_str = self.new_address(&derivation);
             if address_str.starts_with("Error") {
                 continue; // Skip invalid addresses
             }
-            
-            println!("Fetching TXs for: {}", address_str);
             
             // Initialize address balance tracking
             address_balances.insert(
@@ -700,87 +762,30 @@ impl Wallet {
                 },
             );
             
-            // Paginate through transactions
-            let mut last_txid = None;
-            loop {
-                let url = match last_txid {
-                    Some(txid) => format!(
-                        "{}/address/{}/txs/chain/{}",
-                        self.esplora_url, address_str, txid
-                    ),
-                    None => format!("{}/address/{}/txs", self.esplora_url, address_str),
-                };
-                
-                let response = client.get(&url).send().await?;
-                
-                if !response.status().is_success() {
-                    println!("Error fetching txs for {}: {:?}", address_str, response.status());
-                    break;
-                }
-                
-                let txs_text = response.text().await?;
-                
-                let txs_for_address: Vec<EsploraTransaction> = match serde_json::from_str(&txs_text) {
-                    Ok(txs) => txs,
-                    Err(e) => {
-                        println!("Error parsing JSON: {}", e);
-                        break;
-                    }
-                };
-                
-                if txs_for_address.is_empty() {
-                    break;
-                }
-                
-                // Update balances and collect transactions
-                for tx in txs_for_address.clone() {
-                    // Update received amount
-                    for output in &tx.vout {
-                        if output.scriptpubkey_address == address_str {
-                            if let Some(balance) = address_balances.get_mut(&address_str) {
-                                balance.received = balance.received.checked_add(output.value)
-                                    .unwrap_or(balance.received);
-                                balance.balance = balance.balance.checked_add(output.value)
-                                    .unwrap_or(balance.balance);
-                            }
+            // Fetch and process transactions for this address
+            match self.fetch_address_transactions(&address_str).await {
+                Ok(txs_for_address) => {
+                    // Process each transaction
+                    for tx in &txs_for_address {
+                        // Update balance tracking
+                        if let Some(balance) = address_balances.get_mut(&address_str) {
+                            Self::update_address_balance(tx, &address_str, balance);
                         }
+                        all_txs.push(tx.clone());
                     }
-                    
-                    // Update spent amount
-                    for input in &tx.vin {
-                        if let Some(prevout) = &input.prevout {
-                            if prevout.scriptpubkey_address == address_str {
-                                if let Some(balance) = address_balances.get_mut(&address_str) {
-                                    balance.spent = balance.spent.checked_add(prevout.value)
-                                        .unwrap_or(balance.spent);
-                                    balance.balance = balance.balance.checked_sub(prevout.value)
-                                        .unwrap_or(balance.balance);
-                                }
-                            }
-                        }
-                    }
-                    
-                    all_txs.push(tx);
+                },
+                Err(e) => {
+                    // Just log the error but continue with other addresses
+                    eprintln!("Error fetching transactions for {}: {}", address_str, e);
                 }
-                
-                // Update last_txid for pagination
-                last_txid = txs_for_address.last().map(|tx| tx.txid.clone());
             }
         }
         
-        // Sort and deduplicate transactions by txid
+        // Sort by block height (newest first) and deduplicate by txid
         all_txs.sort_by(|a, b| b.status.block_height.unwrap_or(0).cmp(&a.status.block_height.unwrap_or(0)));
         all_txs.dedup_by(|a, b| a.txid == b.txid);
         
-        // Print address balances - can be removed in production
-        println!("\nAddress Balances:");
-        for (_, balance) in address_balances.iter() {
-            println!(
-                "Address: {}, Received: {}, Spent: {}, Balance: {}",
-                balance.address, balance.received, balance.spent, balance.balance
-            );
-        }
-        
+        // Return the transactions
         Ok(all_txs)
     }
 }
