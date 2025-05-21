@@ -822,3 +822,161 @@ pub struct EsploraStatus{
     pub block_height : Option<u64>,
     pub block_hash : Option<String>,
 }
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TransactionInput {
+    pub txid: String,
+    pub vout: u32,
+    pub prevout: Option<Prevout>,
+    pub scriptsig: String,
+    pub witness: Option<Vec<String>>,
+    pub sequence: u32,
+    pub is_coinbase: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TransactionOutput {
+    pub scriptpubkey: String,
+    pub scriptpubkey_address: String,
+    pub value: u64,
+    pub scriptpubkey_type: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Prevout {
+    pub scriptpubkey: String,
+    pub scriptpubkey_address: String,
+    pub value: u64,
+    pub scriptpubkey_type: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct EsploraTransaction {
+    pub txid: String,
+    pub status: EsploraStatus,
+    pub vin: Vec<TransactionInput>,
+    pub vout: Vec<TransactionOutput>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AddressBalance {
+    pub address: String,
+    pub received: u64,
+    pub spent: u64,
+    pub balance: u64,
+}
+
+pub async fn get_tx_history_from_zpub(zpub: &str, esplora_url: &str) -> Result<Vec<EsploraTransaction>, Box<dyn std::error::Error>> {
+    let client = Client::new();
+    let xpub_str = convert_to_xpub(zpub.to_string());
+    if xpub_str.starts_with("Error") {
+        return Err(xpub_str.into());
+    }
+    let xpub = match Xpub::from_str(&xpub_str) {
+        Ok(xpub) => xpub,
+        Err(e) => return Err(Box::new(e)),
+    };
+
+    let mut all_txs: Vec<EsploraTransaction> = Vec::new();
+    let mut address_balances: HashMap<String, AddressBalance> = HashMap::new();
+
+    // Scan both receive (m/0/i) and change (m/1/i) addresses
+    for purpose in 0..2 {
+        for i in 0..5 {
+            let path = match DerivationPath::from_str(&format!("m/{}/{}", purpose, i)) {
+                Ok(path) => path,
+                Err(e) => return Err(Box::new(e)),
+            };
+            let child = match xpub.derive_pub(&bitcoin::secp256k1::Secp256k1::new(), &path) {
+                Ok(child) => child,
+                Err(e) => return Err(Box::new(e)),
+            };
+            let pubkey = child.to_pub();
+            let address = Address::p2wpkh(&pubkey, Network::Bitcoin);
+            println!("Fetching TXs for: {}", address);
+
+            // Initialize address balance tracking
+            address_balances.insert(
+                address.to_string(),
+                AddressBalance {
+                    address: address.to_string(),
+                    received: 0,
+                    spent: 0,
+                    balance: 0,
+                },
+            );
+
+            // Paginate through transactions
+            let mut last_txid = None;
+            loop {
+                let url = match last_txid {
+                    Some(txid) => format!(
+                        "{}/address/{}/txs/chain/{}",
+                        esplora_url, address, txid
+                    ),
+                    None => format!("{}/address/{}/txs", esplora_url, address),
+                };
+
+                let response = client.get(&url).send().await?;
+                if !response.status().is_success() {
+                    println!("Error fetching txs for {}: {:?}", address, response.status());
+                    break;
+                }
+
+                let txs_for_address: Vec<EsploraTransaction> = response.json().await?;
+                if txs_for_address.is_empty() {
+                    break;
+                }
+
+                // Update balances and collect transactions
+                for tx in txs_for_address.clone() {
+                    // Update received amount
+                    for output in &tx.vout {
+                        if output.scriptpubkey_address == address.to_string() {
+                            if let Some(balance) = address_balances.get_mut(&address.to_string()) {
+                                balance.received = balance.received.checked_add(output.value)
+                                    .unwrap_or(balance.received);
+                                balance.balance = balance.balance.checked_add(output.value)
+                                    .unwrap_or(balance.balance);
+                            }
+                        }
+                    }
+
+                    // Update spent amount
+                    for input in &tx.vin {
+                        if let Some(prevout) = &input.prevout {
+                            if prevout.scriptpubkey_address == address.to_string() {
+                                if let Some(balance) = address_balances.get_mut(&address.to_string()) {
+                                    balance.spent = balance.spent.checked_add(prevout.value)
+                                        .unwrap_or(balance.spent);
+                                    balance.balance = balance.balance.checked_sub(prevout.value)
+                                        .unwrap_or(balance.balance);
+                                }
+                            }
+                        }
+                    }
+
+                    all_txs.push(tx);
+                }
+
+                // Update last_txid for pagination
+                last_txid = txs_for_address.last().map(|tx| tx.txid.clone());
+            }
+        }
+    }
+
+    // Sort and deduplicate transactions by txid
+    all_txs.sort_by(|a, b| b.status.block_height.unwrap_or(0).cmp(&a.status.block_height.unwrap_or(0)));
+    all_txs.dedup_by(|a, b| a.txid == b.txid);
+
+    // Print address balances
+    println!("\nAddress Balances:");
+    for (_, balance) in address_balances.iter() {
+        println!(
+            "Address: {}, Received: {}, Spent: {}, Balance: {}",
+            balance.address, balance.received, balance.spent, balance.balance
+        );
+    }
+
+    Ok(all_txs)
+}
