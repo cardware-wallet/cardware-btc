@@ -637,47 +637,12 @@ impl Wallet{
     pub async fn get_tx_history(&self) -> Result<JsValue, JsValue> {
         match self.get_tx_history_internal().await {
             Ok(txs) => {
-                // Collect wallet addresses for transaction analysis
-                let mut wallet_addresses = Vec::new();
-                for i in 0..5 {  // Check a few derivation paths
-                    let address = self.new_address(&format!("m/0/{}", i));
-                    if !address.starts_with("Error") {
-                        wallet_addresses.push(address);
-                    }
-                    let change_address = self.new_address(&format!("m/1/{}", i));
-                    if !change_address.starts_with("Error") {
-                        wallet_addresses.push(change_address);
-                    }
-                }
+                let wallet_addresses = self.get_wallet_addresses();
                 
                 // Convert transactions to summaries with detailed analysis
-                let tx_summaries: Vec<TransactionSummary> = txs.iter().map(|tx| {
-                    let sent = tx.value_sent_from_wallet(&wallet_addresses);
-                    let received = tx.value_received_by_wallet(&wallet_addresses);
-                    let fee = tx.fee();
-                    
-                    // Calculate net effect on wallet
-                    let net_effect = if sent > 0 {
-                        (received as i64) - (sent as i64) - (fee as i64)
-                    } else {
-                        received as i64
-                    };
-                    
-                    TransactionSummary {
-                        txid: tx.txid.clone(),
-                        status: tx.status.clone(),
-                        total_input_value: tx.total_input_value(),
-                        total_output_value: tx.total_output_value(),
-                        fee,
-                        sent_from_wallet: sent,
-                        received_by_wallet: received,
-                        net_effect,
-                        recipients: tx.external_recipients(&wallet_addresses),
-                        timestamp: None, // Could fetch from block time if needed
-                        inputs: tx.vin.clone(),
-                        outputs: tx.vout.clone(),
-                    }
-                }).collect();
+                let tx_summaries: Vec<EsploraTransactionSummary> = txs.iter()
+                    .map(|tx| tx.to_summary(&wallet_addresses))
+                    .collect();
                 
                 match serde_json::to_string(&tx_summaries) {
                     Ok(json_str) => Ok(JsValue::from_str(&json_str)),
@@ -686,6 +651,26 @@ impl Wallet{
             },
             Err(e) => Err(JsValue::from_str(&e.to_string())),
         }
+    }
+    
+    // Get wallet's addresses for transaction analysis
+    pub fn get_wallet_addresses(&self) -> Vec<String> {
+        let mut addresses = Vec::new();
+        // Check receive addresses (m/0/*)
+        for i in 0..5 {
+            let address = self.new_address(&format!("m/0/{}", i));
+            if !address.starts_with("Error") {
+                addresses.push(address);
+            }
+        }
+        // Check change addresses (m/1/*)
+        for i in 0..5 {
+            let address = self.new_address(&format!("m/1/{}", i));
+            if !address.starts_with("Error") {
+                addresses.push(address);
+            }
+        }
+        addresses
     }
 }
 
@@ -1084,7 +1069,6 @@ impl EsploraTransaction {
         let input_value = self.total_input_value();
         let output_value = self.total_output_value();
         
-        // If input_value < output_value, it's a coinbase transaction or missing data
         if input_value > output_value {
             input_value - output_value
         } else {
@@ -1110,26 +1094,57 @@ impl EsploraTransaction {
     }
     
     // Identify external recipients (non-wallet addresses)
-    pub fn external_recipients(&self, wallet_addresses: &[String]) -> Vec<(String, u64)> {
+    pub fn external_outputs(&self, wallet_addresses: &[String]) -> Vec<(String, u64)> {
         self.vout.iter()
             .filter(|output| !wallet_addresses.contains(&output.scriptpubkey_address))
             .map(|output| (output.scriptpubkey_address.clone(), output.value))
             .collect()
     }
+    
+    // Convert to transaction summary
+    pub fn to_summary(&self, wallet_addresses: &[String]) -> EsploraTransactionSummary {
+        let sent = self.value_sent_from_wallet(wallet_addresses);
+        let received = self.value_received_by_wallet(wallet_addresses);
+        let fee = self.fee();
+        
+        // Calculate net effect on wallet
+        let net_value = if sent > 0 {
+            (received as i64) - (sent as i64)
+        } else {
+            received as i64
+        };
+        
+        EsploraTransactionSummary {
+            txid: self.txid.clone(),
+            status: self.status.clone(),
+            value_in: self.total_input_value(),
+            value_out: self.total_output_value(),
+            fee,
+            sent,
+            received,
+            net_value,
+            external_outputs: self.external_outputs(wallet_addresses),
+            block_height: self.status.block_height,
+            confirmed: self.status.confirmed,
+            inputs_count: self.vin.len(),
+            outputs_count: self.vout.len(),
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct TransactionSummary {
+pub struct EsploraTransactionSummary {
     pub txid: String,
     pub status: EsploraStatus,
-    pub total_input_value: u64,
-    pub total_output_value: u64,
+    pub value_in: u64,
+    pub value_out: u64,
     pub fee: u64,
-    pub sent_from_wallet: u64,
-    pub received_by_wallet: u64,
-    pub net_effect: i64,
-    pub recipients: Vec<(String, u64)>,
-    pub timestamp: Option<u64>,
-    pub inputs: Vec<TransactionInput>,
-    pub outputs: Vec<TransactionOutput>,
+    pub sent: u64,
+    pub received: u64,
+    pub net_value: i64,
+    pub external_outputs: Vec<(String, u64)>,
+    pub block_height: Option<u64>,
+    pub confirmed: bool,
+    pub inputs_count: usize,
+    pub outputs_count: usize,
 }

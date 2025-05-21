@@ -21,18 +21,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Ok(txs) => {
             println!("Found {} transactions:", txs.len());
             
-            // Collect wallet addresses for transaction analysis
-            let mut wallet_addresses = Vec::new();
-            for i in 0..5 {  // Check a few derivation paths
-                let address = wallet.new_address(&format!("m/0/{}", i));
-                if !address.starts_with("Error") {
-                    wallet_addresses.push(address);
-                }
-                let change_address = wallet.new_address(&format!("m/1/{}", i));
-                if !change_address.starts_with("Error") {
-                    wallet_addresses.push(change_address);
-                }
-            }
+            // Get wallet addresses for transaction analysis
+            let wallet_addresses = wallet.get_wallet_addresses();
             
             for tx in txs {
                 println!("\nTransaction: {}", tx.txid);
@@ -55,7 +45,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     
                     // Show external recipients
                     println!("Recipients:");
-                    for (address, amount) in tx.external_recipients(&wallet_addresses) {
+                    for (address, amount) in tx.external_outputs(&wallet_addresses) {
                         println!("  - {} satoshis to {}", amount, address);
                     }
                 }
@@ -65,8 +55,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 
                 // Net effect on wallet
+                let net_value = if sent > 0 {
+                    (received as i64) - (sent as i64)
+                } else {
+                    received as i64
+                };
+                
                 if sent > 0 && received > 0 {
-                    println!("Net change: {} satoshis", received as i64 - sent as i64 - (if sent > 0 { fee } else { 0 }) as i64);
+                    println!("Net change: {} satoshis", net_value);
                 } else if sent > 0 {
                     println!("Net change: -{} satoshis (including {} fee)", sent + fee, fee);
                 } else if received > 0 {
