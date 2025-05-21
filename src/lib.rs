@@ -637,7 +637,49 @@ impl Wallet{
     pub async fn get_tx_history(&self) -> Result<JsValue, JsValue> {
         match self.get_tx_history_internal().await {
             Ok(txs) => {
-                match serde_json::to_string(&txs) {
+                // Collect wallet addresses for transaction analysis
+                let mut wallet_addresses = Vec::new();
+                for i in 0..5 {  // Check a few derivation paths
+                    let address = self.new_address(&format!("m/0/{}", i));
+                    if !address.starts_with("Error") {
+                        wallet_addresses.push(address);
+                    }
+                    let change_address = self.new_address(&format!("m/1/{}", i));
+                    if !change_address.starts_with("Error") {
+                        wallet_addresses.push(change_address);
+                    }
+                }
+                
+                // Convert transactions to summaries with detailed analysis
+                let tx_summaries: Vec<TransactionSummary> = txs.iter().map(|tx| {
+                    let sent = tx.value_sent_from_wallet(&wallet_addresses);
+                    let received = tx.value_received_by_wallet(&wallet_addresses);
+                    let fee = tx.fee();
+                    
+                    // Calculate net effect on wallet
+                    let net_effect = if sent > 0 {
+                        (received as i64) - (sent as i64) - (fee as i64)
+                    } else {
+                        received as i64
+                    };
+                    
+                    TransactionSummary {
+                        txid: tx.txid.clone(),
+                        status: tx.status.clone(),
+                        total_input_value: tx.total_input_value(),
+                        total_output_value: tx.total_output_value(),
+                        fee,
+                        sent_from_wallet: sent,
+                        received_by_wallet: received,
+                        net_effect,
+                        recipients: tx.external_recipients(&wallet_addresses),
+                        timestamp: None, // Could fetch from block time if needed
+                        inputs: tx.vin.clone(),
+                        outputs: tx.vout.clone(),
+                    }
+                }).collect();
+                
+                match serde_json::to_string(&tx_summaries) {
                     Ok(json_str) => Ok(JsValue::from_str(&json_str)),
                     Err(e) => Err(JsValue::from_str(&format!("Error serializing transactions: {}", e))),
                 }
@@ -1018,4 +1060,76 @@ pub struct AddressBalance {
     pub received: u64,
     pub spent: u64,
     pub balance: u64,
+}
+
+// Add transaction analysis methods
+impl EsploraTransaction {
+    // Calculate the total value of all inputs
+    pub fn total_input_value(&self) -> u64 {
+        self.vin.iter()
+            .filter_map(|input| input.prevout.as_ref())
+            .map(|prevout| prevout.value)
+            .sum()
+    }
+    
+    // Calculate the total value of all outputs
+    pub fn total_output_value(&self) -> u64 {
+        self.vout.iter()
+            .map(|output| output.value)
+            .sum()
+    }
+    
+    // Calculate transaction fee
+    pub fn fee(&self) -> u64 {
+        let input_value = self.total_input_value();
+        let output_value = self.total_output_value();
+        
+        // If input_value < output_value, it's a coinbase transaction or missing data
+        if input_value > output_value {
+            input_value - output_value
+        } else {
+            0
+        }
+    }
+    
+    // Calculate how much was sent from the wallet
+    pub fn value_sent_from_wallet(&self, wallet_addresses: &[String]) -> u64 {
+        self.vin.iter()
+            .filter_map(|input| input.prevout.as_ref())
+            .filter(|prevout| wallet_addresses.contains(&prevout.scriptpubkey_address))
+            .map(|prevout| prevout.value)
+            .sum()
+    }
+    
+    // Calculate how much was received by the wallet
+    pub fn value_received_by_wallet(&self, wallet_addresses: &[String]) -> u64 {
+        self.vout.iter()
+            .filter(|output| wallet_addresses.contains(&output.scriptpubkey_address))
+            .map(|output| output.value)
+            .sum()
+    }
+    
+    // Identify external recipients (non-wallet addresses)
+    pub fn external_recipients(&self, wallet_addresses: &[String]) -> Vec<(String, u64)> {
+        self.vout.iter()
+            .filter(|output| !wallet_addresses.contains(&output.scriptpubkey_address))
+            .map(|output| (output.scriptpubkey_address.clone(), output.value))
+            .collect()
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TransactionSummary {
+    pub txid: String,
+    pub status: EsploraStatus,
+    pub total_input_value: u64,
+    pub total_output_value: u64,
+    pub fee: u64,
+    pub sent_from_wallet: u64,
+    pub received_by_wallet: u64,
+    pub net_effect: i64,
+    pub recipients: Vec<(String, u64)>,
+    pub timestamp: Option<u64>,
+    pub inputs: Vec<TransactionInput>,
+    pub outputs: Vec<TransactionOutput>,
 }

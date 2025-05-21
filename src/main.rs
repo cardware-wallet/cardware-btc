@@ -2,7 +2,7 @@ use cardware_btc::Wallet;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let zpub = "zpub6rTqkZF6uTJgu3Hye8gg2imLMLjfYRfLquBbXP5FwEJPTFS188D6PDr4aDiXjdw2oLVjMjxacjrksENLC6nS1kf6wLGC3M1TuZVRF8HNk1D";
+    let zpub = "zpub6qWnLWskXjBhPC3xaBd1ZBQUP1qmjuoH2H67jfZqetTKU5LjcJkicLdoa1iDSfgrd2Bw2a1gdCirKvUQ6kxffe8yNNENPCoDS68MqfBcXyb";
     let esplora_url = "https://btc.cardwarewallet.com";
     
     // Create a wallet instance
@@ -20,10 +20,59 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     match wallet.get_tx_history_internal().await {
         Ok(txs) => {
             println!("Found {} transactions:", txs.len());
+            
+            // Collect wallet addresses for transaction analysis
+            let mut wallet_addresses = Vec::new();
+            for i in 0..5 {  // Check a few derivation paths
+                let address = wallet.new_address(&format!("m/0/{}", i));
+                if !address.starts_with("Error") {
+                    wallet_addresses.push(address);
+                }
+                let change_address = wallet.new_address(&format!("m/1/{}", i));
+                if !change_address.starts_with("Error") {
+                    wallet_addresses.push(change_address);
+                }
+            }
+            
             for tx in txs {
                 println!("\nTransaction: {}", tx.txid);
                 println!("Block Height: {:?}", tx.status.block_height);
                 println!("Confirmed: {}", tx.status.confirmed);
+                
+                // Calculate transaction values
+                let total_in = tx.total_input_value();
+                let total_out = tx.total_output_value();
+                let fee = tx.fee();
+                let received = tx.value_received_by_wallet(&wallet_addresses);
+                let sent = tx.value_sent_from_wallet(&wallet_addresses);
+                
+                println!("Total Input Value: {} satoshis", total_in);
+                println!("Total Output Value: {} satoshis", total_out);
+                println!("Fee: {} satoshis", fee);
+                
+                if sent > 0 {
+                    println!("Sent from wallet: {} satoshis", sent);
+                    
+                    // Show external recipients
+                    println!("Recipients:");
+                    for (address, amount) in tx.external_recipients(&wallet_addresses) {
+                        println!("  - {} satoshis to {}", amount, address);
+                    }
+                }
+                
+                if received > 0 {
+                    println!("Received to wallet: {} satoshis", received);
+                }
+                
+                // Net effect on wallet
+                if sent > 0 && received > 0 {
+                    println!("Net change: {} satoshis", received as i64 - sent as i64 - (if sent > 0 { fee } else { 0 }) as i64);
+                } else if sent > 0 {
+                    println!("Net change: -{} satoshis (including {} fee)", sent + fee, fee);
+                } else if received > 0 {
+                    println!("Net change: +{} satoshis", received);
+                }
+                
                 println!("Inputs: {}", tx.vin.len());
                 println!("Outputs: {}", tx.vout.len());
             }
