@@ -744,7 +744,14 @@ impl Wallet {
             }
         }
         // Sort by block height (newest first) and deduplicate by txid
-        all_txs.sort_by(|a, b| b.block_height.unwrap_or(0).cmp(&a.block_height.unwrap_or(0)));
+        all_txs.sort_by(|a, b| {
+            match (a.block_height, b.block_height) {
+                (None, None) => b.timestamp.unwrap_or(0).cmp(&a.timestamp.unwrap_or(0)),
+                (None, Some(_)) => std::cmp::Ordering::Less,
+                (Some(_), None) => std::cmp::Ordering::Greater,
+                (Some(ha), Some(hb)) => hb.cmp(&ha),
+            }
+        });
         all_txs.dedup_by(|a, b| a.txid == b.txid);
         // Return the simplified transactions
         Ok(all_txs)
