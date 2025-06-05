@@ -16,6 +16,10 @@ use bitcoin::consensus::encode::deserialize;
 use bitcoin::bip32::{Xpub, DerivationPath};
 use bitcoin::PublicKey;
 use bitcoin::Psbt;
+
+// Constants
+pub const GAP_LIMIT: usize = 20;
+
 //Main Wallet Object
 #[wasm_bindgen]
 pub struct Wallet{
@@ -647,24 +651,77 @@ impl Wallet{
         }
     }
     
+    // Helper method to check if an address has been used
+    async fn is_address_used(&self, client: &Client, address: &str) -> Result<bool, Box<dyn std::error::Error>> {
+        let url = format!("{}/address/{}/txs?limit=1", self.esplora_url, address);
+        let response = client.get(&url).send().await?;
+        
+        if !response.status().is_success() {
+            return Err(format!("Esplora returned {} for {}", response.status(), address).into());
+        }
+        
+        let txs: Vec<EsploraTransaction> = response.json().await?;
+        Ok(!txs.is_empty())
+    }
+
     // Get wallet's addresses for transaction analysis
-    fn get_wallet_addresses(&self) -> Vec<String> {
+    async fn get_wallet_addresses(&self) -> Result<Vec<String>, Box<dyn std::error::Error>> {
         let mut addresses = Vec::new();
+        let mut unused_count = 0;
+        let client = Client::new();
+        
         // Check receive addresses (m/0/*)
-        for i in 0..5 {
+        for i in 0.. {
             let address = self.new_address(&format!("m/0/{}", i));
-            if !address.starts_with("Error") {
-                addresses.push(address);
+            if address.starts_with("Error") {
+                break;
+            }
+            
+            match self.is_address_used(&client, &address).await {
+                Ok(true) => {
+                    addresses.push(address);
+                    unused_count = 0;
+                },
+                Ok(false) => {
+                    unused_count += 1;
+                    if unused_count >= GAP_LIMIT {
+                        break;
+                    }
+                },
+                Err(e) => {
+                    return Err(format!("Error checking receive address {}: {}", i, e).into());
+                }
             }
         }
+
+        // Reset unused count for change addresses
+        unused_count = 0;
+        
         // Check change addresses (m/1/*)
-        for i in 0..5 {
+        for i in 0.. {
             let address = self.new_address(&format!("m/1/{}", i));
-            if !address.starts_with("Error") {
-                addresses.push(address);
+            if address.starts_with("Error") {
+                break;
+            }
+            
+            match self.is_address_used(&client, &address).await {
+                Ok(true) => {
+                    addresses.push(address);
+                    unused_count = 0;
+                },
+                Ok(false) => {
+                    unused_count += 1;
+                    if unused_count >= GAP_LIMIT {
+                        break;
+                    }
+                },
+                Err(e) => {
+                    return Err(format!("Error checking change address {}: {}", i, e).into());
+                }
             }
         }
-        addresses
+        
+        Ok(addresses)
     }
 }
 
@@ -673,7 +730,7 @@ impl Wallet {
     // Simplified transaction history implementation - internal method
     pub async fn get_tx_history_internal(&self) -> Result<Vec<TransactionSummary>, Box<dyn std::error::Error>> {
         let mut all_txs = Vec::new();
-        let wallet_addresses = self.get_wallet_addresses();
+        let wallet_addresses = self.get_wallet_addresses().await?;
         
         // Process each address
         for address in &wallet_addresses {
@@ -710,7 +767,7 @@ impl Wallet {
         let raw_txs: Vec<EsploraTransaction> = response.json().await?;
         
         // Convert raw transactions to simplified summaries
-        let wallet_addresses = self.get_wallet_addresses();
+        let wallet_addresses = self.get_wallet_addresses().await?;
         let tx_summaries = raw_txs.into_iter()
             .map(|tx| {
                 // Calculate total inputs and outputs values
