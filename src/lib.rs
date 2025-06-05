@@ -734,51 +734,36 @@ impl Wallet {
         tx: EsploraTransaction,
         wallet_addresses: &Vec<String>,
     ) -> TransactionSummary {
-        // 1) Sum all input values (these prevouts are by definition owned by our wallet).
-        let total_input: u64 = tx.vin.iter()
-            .filter_map(|vin| vin.prevout.as_ref())  // skip coinbase or missing prevout
-            .map(|prevout| prevout.value)           // each prevout.value is in satoshis
+        let in_total: u64 = tx.vin.iter()
+            .filter_map(|vin| vin.prevout.as_ref())
+            .map(|p| p.value)
             .sum();
-    
-        // 2) Sum all output values (anyone's outputs—both wallet change + external).
-        let total_output: u64 = tx.vout.iter()
-            .map(|vout| vout.value)
-            .sum();
-    
-        // 3) Fee = inputs − outputs (clamped at zero, though it should never go negative on a valid TX)
-        let fee = total_input.saturating_sub(total_output);
-    
-        // 4) "Sent" = how much our wallet actually spent:
-        //    look at each input's prevout; if that prevout's address is in our wallet_addresses,
-        //    add up its value.
+        let out_total: u64 = tx.vout.iter().map(|o| o.value).sum();
+        let fee = in_total.saturating_sub(out_total);
+
         let sent: u64 = tx.vin.iter()
-            .filter_map(|vin| vin.prevout.as_ref())                       // get prevout if present
-            .filter(|prevout| wallet_addresses.contains(&prevout.scriptpubkey_address)) 
-            .map(|prevout| prevout.value)
+            .filter_map(|vin| vin.prevout.as_ref())
+            .filter(|p| wallet_addresses.contains(&p.scriptpubkey_address))
+            .map(|p| p.value)
             .sum();
-    
-        // 5) "Received" = how much came back to us (change + payments to us):
-        //    for each output, if its scriptpubkey_address is in our wallet_addresses, sum it.
         let received: u64 = tx.vout.iter()
-            .filter(|vout| wallet_addresses.contains(&vout.scriptpubkey_address))
-            .map(|vout| vout.value)
+            .filter(|o| wallet_addresses.contains(&o.scriptpubkey_address))
+            .map(|o| o.value)
             .sum();
-    
-        // 6) "External recipients" = any outputs that went to addresses not in our wallet.
         let external_recipients: Vec<(String, u64)> = tx.vout.iter()
-            .filter(|vout| !wallet_addresses.contains(&vout.scriptpubkey_address))
-            .map(|vout| (vout.scriptpubkey_address.clone(), vout.value))
+            .filter(|o| !wallet_addresses.contains(&o.scriptpubkey_address))
+            .map(|o| (o.scriptpubkey_address.clone(), o.value))
             .collect();
-    
+
         TransactionSummary {
             txid: tx.txid,
             confirmed: tx.status.confirmed,
             block_height: tx.status.block_height,
             timestamp: tx.status.timestamp,
-            sent,                       // how much we spent
-            received,                   // how much we got back
-            fee,                        // miner fee
-            external_recipients,        // list of (address, value) we paid to others
+            sent,
+            received,
+            fee,
+            external_recipients,
         }
     }
     
@@ -792,7 +777,7 @@ impl Wallet {
         for addr in &wallet_addresses {
             let addrs_clone = wallet_addresses.clone();
             let client_clone = client.clone();
-            let this = self.clone(); // if Wallet: Clone
+            let this = self.clone();
             let address = addr.clone();
             futs.push(async move {
                 let raw = this.fetch_all_raw_txs(&client_clone, &address).await?;
