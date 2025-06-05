@@ -16,6 +16,7 @@ use bitcoin::consensus::encode::deserialize;
 use bitcoin::bip32::{Xpub, DerivationPath};
 use bitcoin::PublicKey;
 use bitcoin::Psbt;
+use futures::stream::{FuturesUnordered, StreamExt};
 
 // Constants
 pub const GAP_LIMIT: usize = 20;
@@ -731,15 +732,17 @@ impl Wallet {
     pub async fn get_tx_history_internal(&self) -> Result<Vec<TransactionSummary>, Box<dyn std::error::Error>> {
         let mut all_txs = Vec::new();
         let wallet_addresses = self.get_wallet_addresses().await?;
-        // Process each address
+        let mut futs = FuturesUnordered::new();
         for address in &wallet_addresses {
-            // Fetch transactions for this address
-            match self.fetch_address_transactions(address, &wallet_addresses).await {
+            futs.push(self.fetch_address_transactions(address, &wallet_addresses));
+        }
+        while let Some(result) = futs.next().await {
+            match result {
                 Ok(txs_for_address) => {
                     all_txs.extend(txs_for_address);
                 },
                 Err(e) => {
-                    eprintln!("Error fetching transactions for {}: {}", address, e);
+                    eprintln!("Error fetching transactions: {}", e);
                 }
             }
         }
