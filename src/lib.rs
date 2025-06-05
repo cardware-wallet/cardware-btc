@@ -71,7 +71,7 @@ impl Wallet{
                 };
             if response.status().is_success() {
                 let body = response.text().await.unwrap();
-                match serde_json::from_str::<Vec<EsploraUtxos>>(&body){
+                match serde_json::from_str::<Vec<EsploraUtxo>>(&body){
                     Ok(eutxos) => {
                         for etxo in eutxos{
                             let utxo = Utxo{
@@ -670,7 +670,7 @@ impl Wallet{
 // Non-WASM implementation for native testing
 impl Wallet {
     // Simplified transaction history implementation - internal method
-    pub async fn get_tx_history_internal(&self) -> Result<Vec<TxSummary>, Box<dyn std::error::Error>> {
+    pub async fn get_tx_history_internal(&self) -> Result<Vec<TransactionSummary>, Box<dyn std::error::Error>> {
         let mut all_txs = Vec::new();
         let wallet_addresses = self.get_wallet_addresses();
         
@@ -696,7 +696,7 @@ impl Wallet {
     }
 
     // Simplified fetch transactions for an address
-    async fn fetch_address_transactions(&self, address_str: &str) -> Result<Vec<TxSummary>, Box<dyn std::error::Error>> {
+    async fn fetch_address_transactions(&self, address_str: &str) -> Result<Vec<TransactionSummary>, Box<dyn std::error::Error>> {
         let client = Client::new();
         let url = format!("{}/address/{}/txs", self.esplora_url, address_str);
         
@@ -744,7 +744,7 @@ impl Wallet {
                     .map(|output| (output.scriptpubkey_address.clone(), output.value))
                     .collect();
                 
-                TxSummary {
+                TransactionSummary {
                     txid: tx.txid,
                     confirmed: tx.status.confirmed,
                     block_height: tx.status.block_height,
@@ -777,7 +777,7 @@ pub fn convert_psbt_to_qr(psbt_bytes: &[u8]) -> Vec<String> {
             Some(witness) => witness,
             None => return vec!["Error: No witness UTXO.".to_string()],
         };
-        for (pubkey, (fingerprint, derivation_path)) in input.bip32_derivation.iter() {
+        for (_pubkey, (_fingerprint, derivation_path)) in input.bip32_derivation.iter() {
             let deri_str = format!("{}",derivation_path);
             let prefix = "84'/0'/0'";
             let remaining = match deri_str.strip_prefix(prefix){
@@ -786,7 +786,7 @@ pub fn convert_psbt_to_qr(psbt_bytes: &[u8]) -> Vec<String> {
             };
             match extract_u16s(&remaining) {
                 Ok((first, second)) => append_integers_as_bytes(&mut segwit_ed,first,second,witness_utxo.value.to_sat()),
-                Err(e) => return vec!["Error: Derivation path error.".to_string()],
+                Err(_) => return vec!["Error: Derivation path error.".to_string()],
             }
         }
     }
@@ -934,26 +934,28 @@ pub struct Utxo{
     pub confirmed : bool,
     pub derivation_path : String,
 }
+
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
-pub struct EsploraUtxos{
+pub struct EsploraUtxo{
     pub txid : String,
     pub vout : u64,
     pub status : EsploraStatus,
     pub value : u64,
 }
+
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct EsploraStatus{
     pub confirmed : bool,
     pub block_height : Option<u64>,
     pub block_hash : Option<String>,
-    pub timestamp: Option<u64>, // Add this field
+    pub timestamp: Option<u64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct TransactionInput {
+pub struct EsploraInput {
     pub txid: String,
     pub vout: u32,
-    pub prevout: Option<Prevout>,
+    pub prevout: Option<EsploraPrevout>,
     pub scriptsig: String,
     pub witness: Option<Vec<String>>,
     pub sequence: u32,
@@ -961,7 +963,7 @@ pub struct TransactionInput {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct TransactionOutput {
+pub struct EsploraOutput {
     pub scriptpubkey: String,
     pub scriptpubkey_address: String,
     pub value: u64,
@@ -969,7 +971,7 @@ pub struct TransactionOutput {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Prevout {
+pub struct EsploraPrevout {
     pub scriptpubkey: String,
     pub scriptpubkey_address: String,
     pub value: u64,
@@ -980,21 +982,13 @@ pub struct Prevout {
 pub struct EsploraTransaction {
     pub txid: String,
     pub status: EsploraStatus,
-    pub vin: Vec<TransactionInput>,
-    pub vout: Vec<TransactionOutput>,
+    pub vin: Vec<EsploraInput>,
+    pub vout: Vec<EsploraOutput>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct AddressBalance {
-    pub address: String,
-    pub received: u64,
-    pub spent: u64,
-    pub balance: u64,
-}
-
-// Simple transaction summary with essential fields only
+// Clean transaction summary for application use
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct TxSummary {
+pub struct TransactionSummary {
     pub txid: String,
     pub confirmed: bool,
     pub block_height: Option<u64>,
