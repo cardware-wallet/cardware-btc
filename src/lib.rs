@@ -634,6 +634,7 @@ impl Wallet{
         let dict : HashMap<String, f64>   = serde_json::from_str(&fee_histo).unwrap();
         return Ok(dict);
     }
+    #[wasm_bindgen]
     pub async fn get_tx_history(&self) -> Result<JsValue, JsValue> {
         match self.get_tx_history_internal().await {
             Ok(txs) => {

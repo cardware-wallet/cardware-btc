@@ -1,5 +1,4 @@
 use cardware_btc::Wallet;
-use cardware_btc::array_to_hex;
 use cardware_btc::convert_psbt_to_qr;
 use std::fs;
 
