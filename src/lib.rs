@@ -731,11 +731,10 @@ impl Wallet {
     pub async fn get_tx_history_internal(&self) -> Result<Vec<TransactionSummary>, Box<dyn std::error::Error>> {
         let mut all_txs = Vec::new();
         let wallet_addresses = self.get_wallet_addresses().await?;
-        
         // Process each address
         for address in &wallet_addresses {
             // Fetch transactions for this address
-            match self.fetch_address_transactions(address).await {
+            match self.fetch_address_transactions(address, &wallet_addresses).await {
                 Ok(txs_for_address) => {
                     all_txs.extend(txs_for_address);
                 },
@@ -744,30 +743,23 @@ impl Wallet {
                 }
             }
         }
-        
         // Sort by block height (newest first) and deduplicate by txid
         all_txs.sort_by(|a, b| b.block_height.unwrap_or(0).cmp(&a.block_height.unwrap_or(0)));
         all_txs.dedup_by(|a, b| a.txid == b.txid);
-        
         // Return the simplified transactions
         Ok(all_txs)
     }
 
     // Simplified fetch transactions for an address
-    async fn fetch_address_transactions(&self, address_str: &str) -> Result<Vec<TransactionSummary>, Box<dyn std::error::Error>> {
+    async fn fetch_address_transactions(&self, address_str: &str, wallet_addresses: &Vec<String>) -> Result<Vec<TransactionSummary>, Box<dyn std::error::Error>> {
         let client = Client::new();
         let url = format!("{}/address/{}/txs", self.esplora_url, address_str);
-        
         let response = client.get(&url).send().await?;
-        
         if !response.status().is_success() {
             return Err(format!("Error fetching txs for {}: {}", address_str, response.status()).into());
         }
-        
         let raw_txs: Vec<EsploraTransaction> = response.json().await?;
-        
         // Convert raw transactions to simplified summaries
-        let wallet_addresses = self.get_wallet_addresses().await?;
         let tx_summaries = raw_txs.into_iter()
             .map(|tx| {
                 // Calculate total inputs and outputs values
@@ -775,33 +767,27 @@ impl Wallet {
                     .filter_map(|input| input.prevout.as_ref())
                     .map(|prevout| prevout.value)
                     .sum();
-                
                 let output_total: u64 = tx.vout.iter()
                     .map(|output| output.value)
                     .sum();
-                
                 // Calculate fee: difference between inputs and outputs
                 let fee = if input_total > output_total { input_total - output_total } else { 0 };
-                
                 // Calculate amount sent: sum of inputs from wallet addresses
                 let sent: u64 = tx.vin.iter()
                     .filter_map(|input| input.prevout.as_ref())
                     .filter(|prevout| wallet_addresses.contains(&prevout.scriptpubkey_address))
                     .map(|prevout| prevout.value)
                     .sum();
-                
                 // Calculate amount received: sum of outputs to wallet addresses
                 let received: u64 = tx.vout.iter()
                     .filter(|output| wallet_addresses.contains(&output.scriptpubkey_address))
                     .map(|output| output.value)
                     .sum();
-                
                 // Extract external recipients (outputs to non-wallet addresses)
                 let external_recipients: Vec<(String, u64)> = tx.vout.iter()
                     .filter(|output| !wallet_addresses.contains(&output.scriptpubkey_address))
                     .map(|output| (output.scriptpubkey_address.clone(), output.value))
                     .collect();
-                
                 TransactionSummary {
                     txid: tx.txid,
                     confirmed: tx.status.confirmed,
@@ -814,7 +800,6 @@ impl Wallet {
                 }
             })
             .collect();
-        
         Ok(tx_summaries)
     }
 }
