@@ -230,31 +230,38 @@ impl Wallet{
                 Err(_) => return "Error: Failed to broadcast transaction.".to_string(),
             }
     }
-    pub async fn get_tx_history(&self, derivation : String) -> String{
+    #[wasm_bindgen]
+    pub async fn get_tx_history(&self, derivation: String) -> String {
         let client = reqwest::Client::new();
-        let new_addr = &self.new_address(&derivation);
-        if new_addr == "Error: Invalid extended public key." { return new_addr.to_string();}
+        let addr = self.new_address(&derivation);
+        if addr.starts_with("Error") { return addr; }
 
-        let url_str = format!("{}/address/{}/txs",&self.esplora_url,new_addr);
-        let response = match client
-            .get(url_str)
-            .send()
-            .await{
-                Ok(response) => response,
-                Err(_) => return "Error: Failed to connect to full node (Esplora).".to_string(),
-            };
-        if response.status().is_success() {
-            let body = response.text().await.unwrap();
-            match serde_json::from_str::<Vec<EsploraTx>>(&body){
-                Ok(eutxos) => {
-                    println!("{:#?}",eutxos);
-                }
-                Err(_) => {
-                    return "Error: Failed to deserialize.".to_string();
-                }
-            };
-        }
-        return "error budd tx".to_string();
+        let response = match client.get(format!("{}/address/{}/txs", &self.esplora_url, addr)).send().await {
+            Ok(r) if r.status().is_success() => r.text().await.unwrap_or_default(),
+            _ => return "Error: Failed to fetch transactions from Esplora.".to_string(),
+        };
+
+        let esplora_txs: Vec<EsploraTx> = match serde_json::from_str(&response) {
+            Ok(txs) => txs,
+            Err(_) => return "Error: Failed to deserialize.".to_string(),
+        };
+
+        let tx_history: Vec<TxHistory> = esplora_txs.into_iter().map(|tx| {
+            let received = tx.vout.iter().filter(|v| v.scriptpubkey_address == addr).map(|v| v.value).sum::<u64>();
+            let (amount, tx_type) = if received > 0 { (received, "received") } else { (tx.fee, "sent") };
+            
+            TxHistory {
+                txid: tx.txid,
+                amount,
+                tx_type: tx_type.to_string(),
+                status: tx.status,
+                fee: tx.fee,
+                vin: tx.vin,
+                vout: tx.vout,
+            }
+        }).collect();
+
+        serde_json::to_string(&tx_history).unwrap_or_else(|_| "Error: Failed to serialize transaction history.".to_string())
     }
     pub fn send(&self, recipient_addrs : Vec<String>, amounts : Vec<u64>, fee : u64) -> Vec<String> {
         let dust_limit : u64 = 546;
@@ -895,6 +902,7 @@ pub struct Status {
 pub struct TxHistory {
     pub txid: String,
     pub amount: u64,
+    pub tx_type: String, // "received", "sent", "self"
     pub status: Status,
     pub fee: u64,
     pub vin: Vec<Vin>,
