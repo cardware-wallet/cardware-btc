@@ -651,6 +651,19 @@ impl Wallet{
             Err(e) => Err(JsValue::from_str(&e.to_string())),
         }
     }
+
+    #[wasm_bindgen]
+    pub async fn get_tx_history_with_derivation(&self, derivation_patterns: Vec<String>) -> Result<JsValue, JsValue> {
+        match self.get_tx_history_with_derivation_internal(derivation_patterns).await {
+            Ok(txs) => {
+                match serde_json::to_string(&txs) {
+                    Ok(json_str) => Ok(JsValue::from_str(&json_str)),
+                    Err(e) => Err(JsValue::from_str(&format!("Error serializing transactions: {}", e))),
+                }
+            },
+            Err(e) => Err(JsValue::from_str(&e.to_string())),
+        }
+    }
 }
 
 
@@ -771,6 +784,59 @@ impl Wallet {
         &self,
     ) -> Result<Vec<TransactionSummary>, Box<dyn std::error::Error>> {
         let wallet_addresses = self.get_wallet_addresses().await?;
+        let client = Client::new();
+        let mut futs = FuturesUnordered::new();
+
+        for addr in &wallet_addresses {
+            let addrs_clone = wallet_addresses.clone();
+            let client_clone = client.clone();
+            let this = self.clone();
+            let address = addr.clone();
+            futs.push(async move {
+                let raw = this.fetch_all_raw_txs(&client_clone, &address).await?;
+                Ok(raw.into_iter()
+                    .map(|tx| this.summarize_tx(tx, &addrs_clone))
+                    .collect::<Vec<_>>()
+                ) as Result<Vec<TransactionSummary>, Box<dyn std::error::Error>>
+            });
+        }
+
+        let mut all = Vec::new();
+        while let Some(res) = futs.next().await {
+            match res {
+                Ok(mut xs) => all.append(&mut xs),
+                Err(e) => eprintln!("Error fetching txs: {}", e),
+            }
+        }
+
+        all.sort_by(|a, b| {
+            match (a.block_height, b.block_height) {
+                (None, None) => b.timestamp.unwrap_or(0).cmp(&a.timestamp.unwrap_or(0)),
+                (None, _) => std::cmp::Ordering::Less,
+                (_, None) => std::cmp::Ordering::Greater,
+                (Some(ha), Some(hb)) => hb.cmp(&ha),
+            }
+        });
+        all.dedup_by(|a, b| a.txid == b.txid);
+        Ok(all)
+    }
+
+    async fn get_wallet_addresses_with_derivation(&self, derivation_patterns: Vec<String>) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+        let client = Client::new();
+        let mut all = Vec::new();
+        
+        for pattern in derivation_patterns {
+            all.extend(self.scan_chain(&pattern, &client).await?);
+        }
+        
+        Ok(all)
+    }
+
+    async fn get_tx_history_with_derivation_internal(
+        &self,
+        derivation_patterns: Vec<String>,
+    ) -> Result<Vec<TransactionSummary>, Box<dyn std::error::Error>> {
+        let wallet_addresses = self.get_wallet_addresses_with_derivation(derivation_patterns).await?;
         let client = Client::new();
         let mut futs = FuturesUnordered::new();
 
