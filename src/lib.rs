@@ -230,6 +230,32 @@ impl Wallet{
                 Err(_) => return "Error: Failed to broadcast transaction.".to_string(),
             }
     }
+    pub async fn get_tx_history(&self, derivation : String) -> String{
+        let client = reqwest::Client::new();
+        let new_addr = &self.new_address(&derivation);
+        if new_addr == "Error: Invalid extended public key." { return new_addr.to_string();}
+
+        let url_str = format!("{}/address/{}/txs",&self.esplora_url,new_addr);
+        let response = match client
+            .get(url_str)
+            .send()
+            .await{
+                Ok(response) => response,
+                Err(_) => return "Error: Failed to connect to full node (Esplora).".to_string(),
+            };
+        if response.status().is_success() {
+            let body = response.text().await.unwrap();
+            match serde_json::from_str::<Vec<EsploraTx>>(&body){
+                Ok(eutxos) => {
+                    println!("{:#?}",eutxos);
+                }
+                Err(_) => {
+                    return "Error: Failed to deserialize.".to_string();
+                }
+            };
+        }
+        return "error budd tx".to_string();
+    }
     pub fn send(&self, recipient_addrs : Vec<String>, amounts : Vec<u64>, fee : u64) -> Vec<String> {
         let dust_limit : u64 = 546;
         let network = self.get_network();
@@ -821,4 +847,56 @@ pub struct EsploraStatus{
     pub confirmed : bool,
     pub block_height : Option<u64>,
     pub block_hash : Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
+pub struct EsploraTx {
+    pub txid: String,
+    pub version: u32,
+    pub locktime: u32,
+    pub vin: Vec<Vin>,
+    pub vout: Vec<Vout>,
+    pub size: u32,
+    pub weight: u32,
+    pub fee: u64,
+    pub status: Status,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
+pub struct Vin {
+    pub txid: String,
+    pub vout: u32,
+    pub scriptsig: String,
+    pub scriptsig_asm: String,
+    pub witness: Vec<String>,
+    pub is_coinbase: bool,
+    pub sequence: u64,
+    pub inner_witnessscript_asm: Option<String>, // only present sometimes
+}
+
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
+pub struct Vout {
+    pub scriptpubkey: String,
+    pub scriptpubkey_asm: String,
+    pub scriptpubkey_type: String,
+    pub scriptpubkey_address: String,
+    pub value: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
+pub struct Status {
+    pub confirmed: bool,
+    pub block_height: u32,
+    pub block_hash: String,
+    pub block_time: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
+pub struct TxHistory {
+    pub txid: String,
+    pub amount: u64,
+    pub status: Status,
+    pub fee: u64,
+    pub vin: Vec<Vin>,
+    pub vout: Vec<Vout>,
 }

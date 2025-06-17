@@ -41,14 +41,7 @@ async fn main() {
       println!("Res: {:?}",res);
     }
 
-    //Multisig Broadcast
-    //=============================
-    /*
-    let result = wal.broadcast_multisig(["AgAAAAABAbIVaiUeeL10JflXCbw4727RyErZ8/+ERs9hdIrVmrpNAQAAAAD/////AegDAAAAAAAAFgAUg3fJmFw+Xphk3Et2NlpZUoP4XycDSDBFAiEAk5onGG5supY9hsaXdgNIFOoT//95KXLdsO66FIZyo1gCIFmOTSc/6AIGc5hi1d5hBD9dCeApNs2b/frRSLq4VOc/ASECcikWYSZ3j4ahirRPBY3ZAasVUf7KelhHCdevmCn5MgVHUiECGXDMUG+QxA779XjIsWRTtZfDH1A3SV/KrTvZh6e9CJUhAnIpFmEmd4+GoYq0TwWN2QGrFVH+ynpYRwnXr5gp+TIFUq4AAAAA".to_string(),
-                                          "AgAAAAABAbIVaiUeeL10JflXCbw4727RyErZ8/+ERs9hdIrVmrpNAQAAAAD/////AegDAAAAAAAAFgAUg3fJmFw+Xphk3Et2NlpZUoP4XycDSDBFAiEAw/GaAfnJhAEmdWl8wuCN73qXcgBrcdxMp6/+xMVCPdECIEQIrLKA8tONmhswU1FU7HSDthx/pIxj1PXvGaVq7h7EASECGXDMUG+QxA779XjIsWRTtZfDH1A3SV/KrTvZh6e9CJVHUiECGXDMUG+QxA779XjIsWRTtZfDH1A3SV/KrTvZh6e9CJUhAnIpFmEmd4+GoYq0TwWN2QGrFVH+ynpYRwnXr5gp+TIFUq4AAAAA".to_string()].to_vec()).await;
-    println!("b result: {:?}",&result);*/
-
-    let data = fs::read("test1.psbt").unwrap();
-    let result = convert_psbt_to_qr(&data);
-    println!("result:{:?}",result);
+    //Tx History tests
+    let tx_res = wal.get_tx_history("m/0/0".to_string()).await;
+    println!("tx res: {:?}",tx_res);
 }
