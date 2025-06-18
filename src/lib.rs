@@ -902,7 +902,7 @@ pub struct Status {
 pub struct TxHistory {
     pub txid: String,
     pub amount: u64,
-    pub tx_type: String, // "received", "sent", "self"
+    pub tx_type: String,
     pub status: Status,
     pub fee: u64,
     pub vin: Vec<Vin>,
