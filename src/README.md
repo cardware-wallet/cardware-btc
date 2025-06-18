@@ -55,6 +55,6 @@ The solution is to:
 
 	2) Navigate to your working directory and run "wasm-pack build" this will fail with a C_Linker error
 
-	3) Export your C_Linker using: "export TARGET_CC=/opt/homebrew/Cellar/llvm/18.1.8/bin/clang-18"
+	3) Export your C_Linker using: "export TARGET_CC=/opt/homebrew/Cellar/llvm/20.1.5/bin/clang-20"
 
 	4) Re-run "wasm-pack build" this time it will work (black magic!)

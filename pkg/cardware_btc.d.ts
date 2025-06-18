@@ -41,6 +41,11 @@ export class Wallet {
 */
   broadcast_multisig(transaction_signatures: (string)[]): Promise<string>;
 /**
+* @param {string} derivation
+* @returns {Promise<string>}
+*/
+  get_tx_history(derivation: string): Promise<string>;
+/**
 * @param {(string)[]} recipient_addrs
 * @param {BigUint64Array} amounts
 * @param {bigint} fee

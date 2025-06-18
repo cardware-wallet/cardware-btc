@@ -230,7 +230,6 @@ impl Wallet{
                 Err(_) => return "Error: Failed to broadcast transaction.".to_string(),
             }
     }
-    #[wasm_bindgen]
     pub async fn get_tx_history(&self, derivation: String) -> String {
         let client = reqwest::Client::new();
         let addr = self.new_address(&derivation);
@@ -685,7 +684,7 @@ pub fn convert_psbt_to_qr(psbt_bytes: &[u8]) -> Vec<String> {
             Some(witness) => witness,
             None => return vec!["Error: No witness UTXO.".to_string()],
         };
-        for (pubkey, (fingerprint, derivation_path)) in input.bip32_derivation.iter() {
+        for (_pubkey, (_fingerprint, derivation_path)) in input.bip32_derivation.iter() {
             let deri_str = format!("{}",derivation_path);
             let prefix = "84'/0'/0'";
             let remaining = match deri_str.strip_prefix(prefix){
@@ -694,7 +693,7 @@ pub fn convert_psbt_to_qr(psbt_bytes: &[u8]) -> Vec<String> {
             };
             match extract_u16s(&remaining) {
                 Ok((first, second)) => append_integers_as_bytes(&mut segwit_ed,first,second,witness_utxo.value.to_sat()),
-                Err(e) => return vec!["Error: Derivation path error.".to_string()],
+                Err(_) => return vec!["Error: Derivation path error.".to_string()],
             }
         }
     }
