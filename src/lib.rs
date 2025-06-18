@@ -230,6 +230,39 @@ impl Wallet{
                 Err(_) => return "Error: Failed to broadcast transaction.".to_string(),
             }
     }
+    #[wasm_bindgen]
+    pub async fn get_tx_history(&self, derivation: String) -> String {
+        let client = reqwest::Client::new();
+        let addr = self.new_address(&derivation);
+        if addr.starts_with("Error") { return addr; }
+
+        let response = match client.get(format!("{}/address/{}/txs", &self.esplora_url, addr)).send().await {
+            Ok(r) if r.status().is_success() => r.text().await.unwrap_or_default(),
+            _ => return "Error: Failed to fetch transactions from Esplora.".to_string(),
+        };
+
+        let esplora_txs: Vec<EsploraTx> = match serde_json::from_str(&response) {
+            Ok(txs) => txs,
+            Err(_) => return "Error: Failed to deserialize.".to_string(),
+        };
+
+        let tx_history: Vec<TxHistory> = esplora_txs.into_iter().map(|tx| {
+            let received = tx.vout.iter().filter(|v| v.scriptpubkey_address == addr).map(|v| v.value).sum::<u64>();
+            let (amount, tx_type) = if received > 0 { (received, "received") } else { (tx.fee, "sent") };
+            
+            TxHistory {
+                txid: tx.txid,
+                amount,
+                tx_type: tx_type.to_string(),
+                status: tx.status,
+                fee: tx.fee,
+                vin: tx.vin,
+                vout: tx.vout,
+            }
+        }).collect();
+
+        serde_json::to_string(&tx_history).unwrap_or_else(|_| "Error: Failed to serialize transaction history.".to_string())
+    }
     pub fn send(&self, recipient_addrs : Vec<String>, amounts : Vec<u64>, fee : u64) -> Vec<String> {
         let dust_limit : u64 = 546;
         let network = self.get_network();
@@ -821,4 +854,57 @@ pub struct EsploraStatus{
     pub confirmed : bool,
     pub block_height : Option<u64>,
     pub block_hash : Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
+pub struct EsploraTx {
+    pub txid: String,
+    pub version: u32,
+    pub locktime: u32,
+    pub vin: Vec<Vin>,
+    pub vout: Vec<Vout>,
+    pub size: u32,
+    pub weight: u32,
+    pub fee: u64,
+    pub status: Status,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
+pub struct Vin {
+    pub txid: String,
+    pub vout: u32,
+    pub scriptsig: String,
+    pub scriptsig_asm: String,
+    pub witness: Vec<String>,
+    pub is_coinbase: bool,
+    pub sequence: u64,
+    pub inner_witnessscript_asm: Option<String>, // only present sometimes
+}
+
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
+pub struct Vout {
+    pub scriptpubkey: String,
+    pub scriptpubkey_asm: String,
+    pub scriptpubkey_type: String,
+    pub scriptpubkey_address: String,
+    pub value: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
+pub struct Status {
+    pub confirmed: bool,
+    pub block_height: u32,
+    pub block_hash: String,
+    pub block_time: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
+pub struct TxHistory {
+    pub txid: String,
+    pub amount: u64,
+    pub tx_type: String,
+    pub status: Status,
+    pub fee: u64,
+    pub vin: Vec<Vin>,
+    pub vout: Vec<Vout>,
 }
