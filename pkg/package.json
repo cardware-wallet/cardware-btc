@@ -4,7 +4,7 @@
     "Cardware Wallet (Pty) Ltd"
   ],
   "description": "The official BTC library for interacting with a Cardware device through web.",
-  "version": "1.0.10",
+  "version": "1.0.11",
   "license": "GPL-3.0-only",
   "repository": {
     "type": "git",
