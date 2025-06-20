@@ -246,22 +246,23 @@ impl Wallet{
         };
 
         let tx_history: Vec<TxHistory> = esplora_txs.into_iter().map(|tx| {
-            let received = tx.vout.iter().filter(|v| v.scriptpubkey_address == addr).map(|v| v.value).sum::<u64>();
-            let (amount, tx_type) = if received > 0 { (received, "received") } else { (tx.fee, "sent") };
+            let is_sent = tx.vin.iter().all(|input| 
+                input.is_coinbase || input.prevout.as_ref().map_or(false, |p| p.scriptpubkey_address == addr)
+            );
             
-            TxHistory {
-                txid: tx.txid,
-                amount,
-                tx_type: tx_type.to_string(),
-                status: tx.status,
-                fee: tx.fee,
-                vin: tx.vin,
-                vout: tx.vout,
-            }
+            let (amount, tx_type) = if is_sent {
+                (tx.vout.iter().filter(|v| v.scriptpubkey_address != addr).map(|v| v.value).sum(), "sent")
+            } else {
+                (tx.vout.iter().filter(|v| v.scriptpubkey_address == addr).map(|v| v.value).sum(), "received")
+            };
+            
+            TxHistory { txid: tx.txid, amount, tx_type: tx_type.to_string(), status: tx.status, fee: tx.fee, vin: tx.vin, vout: tx.vout }
         }).collect();
 
         serde_json::to_string(&tx_history).unwrap_or_else(|_| "Error: Failed to serialize transaction history.".to_string())
     }
+
+
     pub fn send(&self, recipient_addrs : Vec<String>, amounts : Vec<u64>, fee : u64) -> Vec<String> {
         let dust_limit : u64 = 546;
         let network = self.get_network();
@@ -878,6 +879,7 @@ pub struct Vin {
     pub is_coinbase: bool,
     pub sequence: u64,
     pub inner_witnessscript_asm: Option<String>, // only present sometimes
+    pub prevout: Option<Vout>, // previous output data
 }
 
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
