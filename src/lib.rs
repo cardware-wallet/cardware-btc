@@ -894,9 +894,9 @@ pub struct Vout {
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct Status {
     pub confirmed: bool,
-    pub block_height: u32,
-    pub block_hash: String,
-    pub block_time: u64,
+    pub block_height: Option<u32>,
+    pub block_hash: Option<String>,
+    pub block_time: Option<u64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
